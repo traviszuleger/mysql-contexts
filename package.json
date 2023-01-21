@@ -1,0 +1,21 @@
+{
+    "name": "@tzuleger/mysql-contexts",
+    "version": "1.0.0",
+    "homepage": "http://pkgs.traviszuleger.com/mysql-contexts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/traviszuleger/mysql-contexts"
+    },
+    "description": "Provides an easy way to interact with the mysql2 connector by creating Contexts connected to a table in your MySQL database. This also supports joining tables on each other to create read-only joined contexts.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "Travis Zuleger",
+    "license": "(MIT OR Apache-2.0)",
+    "type": "module",
+    "dependencies": {
+        "mysql2": "^3.0.1"
+    }
+}
