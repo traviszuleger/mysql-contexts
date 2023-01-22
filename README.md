@@ -364,6 +364,7 @@ type OrderByBuilderFunction<TTableModel> = (where: OrderByBuilder<TTableModel>) 
 Below is a table of key functions that the OrderBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
 
 | Function | Arguments | Respective argument types | Description |
+| -------- | ----------------- | --------------- | ----------- |
 | by | tKey | keyof TTableModel | Returns a model object with three functions, .by(tKey) (reference back to this function), .asc(), and .desc() |
 | by.by() | tKey | keyof TTableModel | See the by() function description |
 | by.asc() | None | None | Sort your results in ascending order (this only applies to the sorting of tKey from your last call to .by(tKey)) |
@@ -396,6 +397,7 @@ It is important to know, if you use a GROUP BY clause, you can only grab the col
 Below is a table of key functions that the GroupByBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
 
 | Function | Arguments | Respective argument types | Description |
+| -------- | ----------------- | --------------- | ----------- |
 | by | tKey | keyof TTableModel | Group your results by the given key. |
 | byDay | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "yearDay" property containing the date. |
 | byWeek | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by week. If this is specified, then the results you get back will have a "yearWeek" property containing the date. |
