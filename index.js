@@ -1,3 +1,3 @@
-import { MySqlTableContext } from "./database";
+import { MySqlTableContext } from "./src/contexts";
 
 export default MySqlTableContext;

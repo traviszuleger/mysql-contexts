@@ -1,7 +1,7 @@
 //@ts-check
 /** @typedef {{ count: number|undefined, yearDay: string, yearWeek: string, yearMonth: string, year: string }} GroupByAliases  */
 
-/** @template T @template K @typedef {import('./type-toolbelt').KeyByValueType<T,K>} KeyByValueType */
+/** @template T @template K @typedef {import('../type-toolbelt').KeyByValueType<T,K>} KeyByValueType */
 /**
  * Class used to help build WHERE conditionals on SQL statements using mysql2 library.
  * @template TTableModel Type representing the Table as it appears in the database.
@@ -20,12 +20,13 @@ export class WhereBuilder {
     }
 
     /**
-     * Sets a flag so the next condition added is negated.
+     * Sets a flag so the next condition added is negated. If you want to negate your entire condition, you can nest another WhereBuilder using the WhereBuilderFunction, where.
+     * @param {((where: WhereBuilder<TTableModel>) => WhereBuilder<TTableModel>)=} where Lambda function to provide nested conditionals with this condition.
      * @returns {WhereBuilder<TTableModel>} The WhereBuilder in its most recent state.
      */
-    not() {
+    not(where=undefined) {
         this._not = true;
-        return this;
+        return where !== undefined ? where(this) : this;
     }
 
     /**
@@ -126,7 +127,7 @@ export class WhereBuilder {
 
     /**
      * Adds a condition to a statement that checks if the column name specified is one of the values specified. 
-     * If a condition already exists, then " AND {colName} IN ({vals[0]}[,...{vals[n]}]" is appended instead.
+     * If a condition already exists, then " AND {colName} IN ({vals[0]}[,...{vals[n]}])" is appended instead.
      * @template {keyof TTableModel} TColumn Some key to the model object that represents the table.
      * @param {TColumn} colName Column name that is being compared to.
      * @param {TTableModel[TColumn][]} vals Array of values respective to the value type of the key passed into colName
@@ -136,6 +137,22 @@ export class WhereBuilder {
         if (!colName || !vals || vals.length <= 0) return this;
         const { nest, builder } = this._buildNest(where);
         this._filter += `${(this._filter.length > 0 ? " AND " : " WHERE ")}${nest(this._negate(`${String(colName)} IN (${Array(vals.length).fill('?').join(', ')})`))}`;
+        this._args = [...this._args, ...vals, ...builder._args];
+        return this;
+    }
+
+    /**
+     * Adds a condition to a statement that checks if the column name specified is not one of the values specified. 
+     * If a condition already exists, then " AND {colName} NOT IN ({vals[0]}[,...{vals[n]}]" is appended instead.
+     * @template {keyof TTableModel} TColumn Some key to the model object that represents the table.
+     * @param {TColumn} colName Column name that is being compared to.
+     * @param {TTableModel[TColumn][]} vals Array of values respective to the value type of the key passed into colName
+     * @param {((where: WhereBuilder<TTableModel>) => WhereBuilder<TTableModel>)=} where Lambda function to provide nested conditionals with this condition.
+     */
+    isNotIn(colName, vals, where = undefined) {
+        if (!colName || !vals || vals.length <= 0) return this;
+        const { nest, builder } = this._buildNest(where);
+        this._filter += `${(this._filter.length > 0 ? " AND " : " WHERE ")}${nest(this._negate(`${String(colName)} NOT IN (${Array(vals.length).fill('?').join(', ')})`))}`;
         this._args = [...this._args, ...vals, ...builder._args];
         return this;
     }
@@ -151,6 +168,20 @@ export class WhereBuilder {
         if (!colName) return this;
         const { nest } = this._buildNest(where);
         this._filter += `${(this._filter.length > 0 ? " AND " : " WHERE ")}${nest(this._negate(String(colName) + " = NULL"))}`;
+        return this;
+    }
+
+    /**
+     * Adds a condition to a statement that checks if the column name specified is NOT NULL.
+     * If a condition already exists, then " AND {colName} <> NULL" is appended instead.
+     * @template {keyof TTableModel} TColumn Some key to the model object that represents the table.
+     * @param {TColumn} colName Column name that is being compared to.
+     * @param {((where: WhereBuilder<TTableModel>) => WhereBuilder<TTableModel>)=} where Lambda function to provide nested conditionals with this condition.
+     */
+    isNotNull(colName, where = undefined) {
+        if (!colName) return this;
+        const { nest } = this._buildNest(where);
+        this._filter += `${(this._filter.length > 0 ? " AND " : " WHERE ")}${nest(this._negate(String(colName) + " <> NULL"))}`;
         return this;
     }
 
@@ -452,51 +483,56 @@ export class WhereBuilder {
 }
 
 /**
- * @template T
+ * @template TTableModel @typedef {{ by: () => OrderByFunction<TTableModel>, asc: () => OrderBuilder, desc: () => OrderBuilder<TTableModel> }} OrderByFunction
+ */
+
+/**
+ * @template TTableModel
  */
 export class OrderBuilder {
-    /** @private @type {string} */
-    _filter = "";
+    /** @private @type {string[]} */
+    _columns = [];
 
     constructor() { }
 
     /**
-     * 
-     * @param {keyof T} tKey 
+     * @param {keyof TTableModel} tKey
+     * @returns {OrderByFunction<TTableModel>}
      */
     by(tKey) {
-        this._filter += " ORDER BY " + String(tKey);
+        this._columns = [...this._columns, String(tKey)];
+        const idx = this._columns.length;
         return {
+            by: (/** @type {keyof TTableModel} */tKey) => this.by(tKey),
             asc: () => {
-                this._filter += " ASC";
+                this._columns[idx] += " ASC";
                 return this;
             },
             desc: () => {
-                this._filter += " DESC";
+                this._columns[idx] += " DESC";
                 return this;
             }
         }
     }
 
     toString() {
-        return this._filter;
+        return ` ORDER BY ${this._columns.join(',')}`;
     }
 }
 
 /**
- * @template T
+ * @template TTableModel
  */
 export class GroupBuilder {
     /** @public @type {{key: string, alias?: string}[]} */ keys = [];
     /** @public @type {string[]} */ _keys = [];
-    /** @private @type {string} */_filter = "";
 
     constructor() { }
 
     /**
-     * Assists with building a GROUP BY statement
-     * @param {keyof T} tKey
-     * @returns {GroupBuilder<T>}
+     * Group your results by the given key.
+     * @param {keyof TTableModel} tKey Column to group by.
+     * @returns {GroupBuilder<TTableModel>} A reference back to this GroupBuilder.
      */
     by(tKey) {
         this.keys = [...this.keys, {
@@ -506,9 +542,9 @@ export class GroupBuilder {
     }
 
     /**
-     * 
-     * @param {KeyByValueType<T, Date|null|undefined>} tKey
-     * @returns {GroupBuilder<T>}
+     * Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "yearDay" property containing the date.
+     * @param {KeyByValueType<TTableModel, Date|null|undefined>} tKey Column to group by.
+     * @returns {GroupBuilder<TTableModel>} A reference back to this GroupBuilder.
      */
     byDay(tKey) {
         this.keys = [...this.keys, {
@@ -519,8 +555,9 @@ export class GroupBuilder {
     }
 
     /**
-     * @param {KeyByValueType<T, Date|null|undefined>} tKey
-     * @returns {GroupBuilder<T>}
+     * Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "yearWeek" property containing the date.
+     * @param {KeyByValueType<TTableModel, Date|null|undefined>} tKey Column to group by.
+     * @returns {GroupBuilder<TTableModel>} A reference back to this GroupBuilder.
      */
     byWeek(tKey) {
         this.keys = [...this.keys, {
@@ -531,8 +568,9 @@ export class GroupBuilder {
     }
 
     /**
-     * @param {KeyByValueType<T, Date|null|undefined>} tKey
-     * @returns {GroupBuilder<T>}
+     * Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "yearMonth" property containing the date.
+     * @param {KeyByValueType<TTableModel, Date|null|undefined>} tKey Column to group by.
+     * @returns {GroupBuilder<TTableModel>} A reference back to this GroupBuilder.
      */
     byMonth(tKey) {
         this.keys = [...this.keys, {
@@ -543,8 +581,9 @@ export class GroupBuilder {
     }
 
     /**
-     * @param {KeyByValueType<T, Date|null|undefined>} tKey
-     * @returns {GroupBuilder<T>}
+     * Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "year" property containing the date.
+     * @param {KeyByValueType<TTableModel, Date|null|undefined>} tKey Column to group by.
+     * @returns {GroupBuilder<TTableModel>} A reference back to this GroupBuilder.
      */
     byYear(tKey) {
         this.keys = [...this.keys, {
@@ -554,10 +593,18 @@ export class GroupBuilder {
         return this;
     }
 
+    /**
+     * Returns the compiled GROUP BY CLAUSE
+     * @returns {string}
+     */
     toString() {
         return this.keys.length > 0 ? ` GROUP BY ${this.keys.map(k => k.alias != undefined ? k.alias : k.key).join(',')}` : "";
     }
 
+    /**
+     * Returns the columns to include in the SELECT portion of the command.
+     * @returns {string}
+     */
     getSelects() {
         if (this.keys.length <= 0) return '*';
         return `COUNT(*) as count,${this.keys.map(k => `${k.key}${k.alias != undefined ? ` AS ${k.alias}` : ""}`).join(',')}`;

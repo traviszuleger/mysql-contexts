@@ -2,7 +2,7 @@
 import { WhereBuilder, OrderBuilder, GroupBuilder } from './builders.js';
 import { createPool } from "mysql2/promise";
 
-/** @template T @template TK1 @template TK2 @typedef {import('./type-toolbelt.js').ReplaceKey<T, TK1, TK2>} ReplaceKey */
+/** @template T @template TK1 @template TK2 @typedef {import('../type-toolbelt.js').ReplaceKey<T, TK1, TK2>} ReplaceKey */
 
 /**
  * Extracts the generic parameter, TTableModel, from the given TTable MySqlTableContext class object. 
@@ -106,7 +106,7 @@ export class MySqlTableContext {
 
     /**
      * Creates a Connection Pool ready for use inside of multiple MySqlTableContext objects.
-     * @param {import('mysql2/promise').PoolOptions|import('mysql2/promise').Pool} config Configuration to create the pool on.
+     * @param {import('mysql2/promise').PoolOptions} config Configuration to create the pool on.
      * @returns {import('mysql2/promise').Pool} Connection Pool.
      */
     static createPool(config) {
@@ -116,18 +116,18 @@ export class MySqlTableContext {
     /**
      * Creates a new MySQL table context given the mysql2 config options. The user may also pass in an existing "Pool" object too, 
      * which allows this context to work alongside other contexts.
-     * @param {{host: string, user: string, password: string, database: string}|import('mysql2/promise').Pool} configOrPool MySql2 config options to create a Pool object with or an existing Pool.
+     * @param {import('mysql2/promise').PoolOptions|import('mysql2/promise').Pool} configOrPool MySql2 config options to create a Pool object with or an existing Pool.
      * @param {string} table Name of the Table this context is connecting to.
-     * @param {keyof TTableModel|null} aiPrimaryKey Primary key of the table that auto increments. If there is none, then leave null.
+     * @param {keyof TTableModel|null} aiKey Primary key of the table that auto increments. If there is none, then leave null.
      * @param {TableContextOptions} options Context options that enable certain features.
      */
-    constructor(configOrPool, table, aiPrimaryKey=null, options = {}) {
+    constructor(configOrPool, table, aiKey=null, options = {}) {
         this._table = table;
-        this._pKey = aiPrimaryKey;
-        if ('host' in configOrPool) {
-            this._pool = createPool({ ...configOrPool, decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20 });
-        } else {
+        this._pKey = aiKey;
+        if ('query' in configOrPool) {
             this._pool = configOrPool
+        } else {
+            this._pool = createPool({ ...configOrPool, decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20 });
         }
         this._cnnPromise = this._pool.getConnection();
         this._cnnPromise.then(cnn => {
@@ -254,13 +254,14 @@ export class MySqlTableContext {
     /**
      * Gets the total number of records that are stored in the Table this context represents.
      * @param {WhereBuilderFunction<TTableModel>?} where Used to filter the results.
+     * @param {(keyof TTableModel)[]?} distinct Builder function to help build a GROUP BY clause.
      * @returns {Promise<number>} Number specifying the total count of all records that were queried from this command.
      */
-    async count(where = null) {
+    async count(where = null, distinct = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
-        let cmd = `SELECT COUNT(*) FROM ${this._table}${_where.toString()}`;
+        let cmd = `SELECT ${distinct != null ? `COUNT(DISTINCT ${distinct.join(',')}) AS count` : "COUNT(*) AS count"} FROM ${this._table}${_where.toString()}`;
         const ts = await this._query(cmd, _where.getArgs());
-        return ts[0]["COUNT(*)"];
+        return ts[0]["count"];
     }
 
     /**
@@ -277,7 +278,7 @@ export class MySqlTableContext {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
         const _orderBy = orderBy != null ? orderBy(new OrderBuilder()) : new OrderBuilder();
         const _groupBy = groupBy != null ? groupBy(new GroupBuilder()) : new GroupBuilder();
-        let cmd = `SELECT ${distinct != null ? `DISTINCT ${distinct.join(',')}` : _groupBy.getSelects() } `
+        let cmd = `SELECT ${distinct != null ? `DISTINCT ${distinct.join(',')}` : _groupBy.getSelects()} `
             + `FROM ${this._table}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `
             + `${limit > 0 ? "LIMIT " + limit : ""} `
             + `${offset > 0 ? "OFFSET " + offset : ""}`;
