@@ -63,6 +63,12 @@ As you can see, nullable types, as defined in the database, have "?" appended af
 
 In the last section, we created an interface for our Chinook database table, "Customer". Now we will create a Table Context to provide an interface to our Table.
 
+### Constructor
+
+First, you need to know how the MySqlTableContext can be constructed.
+
+### Examples
+
 ```
 import MySqlTableContext from '@tzuleger/mysql-contexts';
 import type { Customer } from "./chinook-types";
@@ -99,14 +105,14 @@ const customerCtx = new MySqlTableContext<Customer>(pool, "Customer", "Id");
 
 Congratulations, you just set up a Table Context to interface to chinook.dbo.Customer. You can alter this code however you like to attach to many different tables.
 
-## Querying from chinook.dbo.Customer
+## Querying from chinook
 
 We were able to create our MySqlTableContext, now we want to query from it. Querying from your context may be a little strange at first. The main two functions for querying is "get" and "getAll".
 
-### get(limit, offset=0, where=null, orderBy=null, groupBy=null, distinct=null);
+### async get(limit, offset=0, where=null, orderBy=null, groupBy=null, distinct=null);
 
 The "get" function is for grabbing an arbitrary amount of records, specified by the {limit} argument. You can add in more arguments to further cleanse your query.  
-Here is a list of all of the records and their descriptions.
+Here is a list of all of the arguments and their descriptions.
  - limit: Number of records to grab.
  - offset: Number specified to offset from the beginning.
  - where: Builder function to help build a WHERE clause.
@@ -210,10 +216,10 @@ The above output will show:
 
 You can see more information on clauses starting in the [WHERE clause](#where-clause) section.
 
-### getAll(where=null, orderBy=null, groupBy=null, distinct=null);
+### async getAll(where=null, orderBy=null, groupBy=null, distinct=null);
 
-The "getAll" function is for grabbing all records from the table. You can add in more arguments to further cleanse your query.  
-Here is a list of all of the records and their descriptions.
+The "getAll" function is for grabbing all records from the table. You can add in certain arguments to further cleanse your query.  
+Here is a list of all of the arguments and their descriptions.
  - limit: Number of records to grab.
  - offset: Number specified to offset from the beginning.
  - where: Builder function to help build a WHERE clause.
@@ -226,11 +232,33 @@ Now, here's an example of a simple Query to grab the all Customer records from c
 ```
 // ... initialization
 
-// Since this is a promise, you can "await" on this function where it will yield the results.
-customerCtx.getAll().then(results => {
-     console.log(results); // this will yield a list of Customer model objects, totaling 59 records from the fresh chinook database.
-});
+// 
+customerCtx.getAll();
+// builds the Query: SELECT * AS count FROM Customer;
 
+```
+
+### async count(where=null, groupByOrDistinctColumns=null)
+
+The "count" function is for grabbing the number of records in the database. You can add certain arguments to further limit the number of records you are querying for.  
+Here is a list of all of the arguments and their descriptions.
+ - where: Builder function to help build a WHERE clause.
+ - distinct: List of column names under this TableContext to select distinctively off of.
+
+Now, here are some examples:
+
+```
+// -- get the total number of customers --
+customerCtx.count();
+// builds the Query: SELECT COUNT(*) AS count FROM Customer;
+
+// -- get the number of customers with the first name, "Frank" --
+customerCtx.count(where => where.equals("FirstName", "Frank"));
+// builds the Query: SELECT COUNT(*) AS count FROM Customer WHERE FirstName='Frank';
+
+// -- get the number of unique countries where customers reside in --
+customerCtx.count(null, ["Country"]);
+// builds the Query: SELECT COUNT(DISTINCT Country) AS count FROM Customer;
 ```
 
 ### WHERE clause
@@ -419,3 +447,107 @@ customerCtx.getAll(null, null, group => group.by("Country"));
 employeeCtx.getAll(null, null, group => group.by("Country").byYear("HireDate"));
 // builds the Query: SELECT COUNT(*) as count, Country, YEAR(HireDate) as year FROM Employee GROUP BY Country, YEAR(HireDate);
 ```
+
+### DISTINCT clause
+
+Although, the DISTINCT keyword isn't necessarily a clause itself, it is described as such since it somewhat belongs in this group.
+
+Building your DISTINCT clause isn't built from an anonymous function, like the other clauses. Instead, it is built just by providing the columns you want to be unique.  
+Here's an example of how you would build a DISTINCT clause:
+
+```
+// ... initialization
+
+// -- get all countries that Customers reside in  --
+customerCtx.getAll(null, null, null, ["Country"]);
+// builds the Query: SELECT DISTINCT Country FROM Customer;
+
+// -- get all countries and cities that Customers reside in  --
+customerCtx.getAll(null, null, null, ["Country", "City"]);
+// builds the Query: SELECT DISTINCT Country FROM Customer;
+```
+
+## Inserting into chinook
+
+With knowing how to query from our database using our context, we also need to know how to insert into our database. The two main functions for inserting are "insert" and "insertMany".
+
+## Updating records in chinook
+
+The update commands have access to the WHERE clause builder function. You can reference adding WHERE clauses [here](#where-clause)
+
+
+## Deleting records from chinook
+
+## Joining tables
+
+### (INNER) JOIN
+
+### OUTER JOIN
+
+### LEFT (INNER) JOIN
+
+### RIGHT (INNER) JOIN
+
+### LEFT OUTER JOIN
+
+### RIGHT OUTER JOIN
+
+## Miscellaneous
+
+### Built-in listeners
+
+The MySqlTableContext class has a few functions that allow you to add your own handlers to certain events.  
+Events are fired when the table does the following:
+ - Inserting record(s)
+ - Updating record(s)
+ - Querying record(s)
+ - Deleting record(s)
+
+# TODO
+
+This section is dedicated to a list of future add-ons.
+
+## Sub-queries
+
+Right now, Table Contexts only interface to a simple command. Although, sub-queries can be costly, they can be very useful, so it is important to include it.
+
+## Protect function arguments
+
+Right now, almost all functions implicitly handle the typing, making it so TypeScript and JSDOC users can easily keep up with the correct arguments to pass in. However, this library should also be used by vanilla JS users. Since that is the case, all functions should be protected by throwing errors for when the argument isn't what is expected.
+
+## LINQ-ish?
+
+Very far stretch, and likely would warrant its own package, but I would like to create LINQ-ish like syntax. 
+
+How would this be accomplished, you may ask? [JavaScript Proxies](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) and [Function Parsing](https://stackoverflow.com/questions/1007981/how-to-get-function-parameter-names-values-dynamically).
+As an example, the where function would get passed a Model object. This model object has no significant values, but the keys are what we would want to read. So instead, the model would be created under a Proxy that intercepts the get property and further assists constructing the WHERE clause. Finally, a function would be called by the end-user to commit the final command.
+
+e.g.,
+
+```
+customerCtx.where((model, $) => model.FirstName == $.Frank && model.LastName == "Harris").execute();
+```
+
+The proxying would look like:
+
+```
+class MySqlTableContext {
+  _columns = [];
+  _values = [];
+  pModel = new Proxy({}, {
+    get(target, prop) {
+      // here, we would pass the prop into our columns list.
+    }
+  });
+  where = new Proxy((model) => this._where, {
+    apply(target, prop, args) {
+      if(args.length <= 0) throw Error('no');
+      // here, we would extract the values into our arguments list.
+      args[0](pModel);
+      return where;
+    }
+  });
+}
+```
+
+The drawback with this would mean there needs to be a lot of parsing of anonymous functions, which could be very costly and make 
