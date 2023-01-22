@@ -539,10 +539,15 @@ class MySqlTableContext {
       // here, we would pass the prop into our columns list.
     }
   });
+  p$ = new Proxy({}, {
+    get(target, prop) {
+      // here, we would pass the prop into our values list.
+    }
+  });
   where = new Proxy((model) => this._where, {
     apply(target, prop, args) {
       if(args.length <= 0) throw Error('no');
-      // here, we would extract the values into our arguments list.
+      // here, we would parse for all the conditional operators to determine what SQL command to build. (e.g., ==, !=, >, >=, <, <=, &&, ||, !)
       args[0](pModel);
       return where;
     }
