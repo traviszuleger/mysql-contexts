@@ -361,7 +361,7 @@ Here is an example of how the OrderByBuilderFunction&lt;TTableModel&gt; class is
 type OrderByBuilderFunction<TTableModel> = (where: OrderByBuilder<TTableModel>) => OrderByBuilder<TTableModel>;
 ```
 
-Below is a table of key functions that the OrderBuilder&lt;TTableModel&gt; class has with descriptions of what they do.
+Below is a table of key functions that the OrderBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
 
 | Function | Arguments | Respective argument types | Description |
 | by | tKey | keyof TTableModel | Returns a model object with three functions, .by(tKey) (reference back to this function), .asc(), and .desc() |
@@ -393,7 +393,7 @@ Just like the other clauses, to build your GROUP BY clause, you need to provide 
 
 It is important to know, if you use a GROUP BY clause, you can only grab the columns that are in your GROUP BY clause.
 
-Below is a table of key functions that the GroupByBuilder&lt;TTableModel&gt; class has with descriptions of what they do.
+Below is a table of key functions that the GroupByBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
 
 | Function | Arguments | Respective argument types | Description |
 | by | tKey | keyof TTableModel | Group your results by the given key. |
