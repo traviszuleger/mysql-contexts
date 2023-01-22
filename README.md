@@ -548,7 +548,7 @@ class MySqlTableContext {
     apply(target, prop, args) {
       if(args.length <= 0) throw Error('no');
       // here, we would parse for all the conditional operators to determine what SQL command to build. (e.g., ==, !=, >, >=, <, <=, &&, ||, !)
-      args[0](pModel);
+      args[0](pModel, p$);
       return where;
     }
   });
