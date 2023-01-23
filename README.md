@@ -515,7 +515,7 @@ The update commands have access to the WHERE clause builder function. You can re
 
 Joining tables is a little bit more intuitive, but is still just as simple as any of the simple interaction commands.
 
-__NOTE: As of version 1.0.2, you can only join on a singular key. There are plans to make it so you can add AND and OR conditionals.__
+__NOTE: As of version 1.0.3, you can only join on a singular key. There are plans to make it so you can add AND and OR conditionals.__
 
 ## (INNER) JOIN
 
