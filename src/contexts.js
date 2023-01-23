@@ -48,7 +48,7 @@ export class MySqlTableContext {
     /** @protected @type {string} */ _table;
     /** @protected @type {keyof TTableModel|null} */ _pKey;
     /** @protected @type {MySql2Connection} */ _cnn;
-    /** @protected @type {Promise<MySql2Connection} */ _cnnPromise;
+    /** @protected @type {Promise<MySql2Connection>} */ _cnnPromise;
     /** @protected @type {TableContextOptions} */ _options;
     /** @protected @type {keyof TTableModel|null} */ _joinKey;
 
