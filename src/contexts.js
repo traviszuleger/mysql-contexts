@@ -2,112 +2,60 @@
 import { WhereBuilder, OrderBuilder, GroupBuilder } from './builders.js';
 import { createPool } from "mysql2/promise";
 
-/** @template T @template TK1 @template TK2 @typedef {import('../type-toolbelt.js').ReplaceKey<T, TK1, TK2>} ReplaceKey */
+/** @typedef {import('mysql2/promise').PoolOptions} MySql2PoolOptions */
+/** @typedef {import('mysql2/promise').Pool} MySql2Pool */
+/** @typedef {import('mysql2/promise').Connection} MySql2Connection */
+/** @typedef {import('mysql2/promise').ResultSetHeader} MySql2ResultSetHeader */
 
-/**
- * Extracts the generic parameter, TTableModel, from the given TTable MySqlTableContext class object. 
- * @template {MySqlTableContext} TTable
- * @typedef {TTable extends MySqlTableContext<infer TTableModel> ? TTableModel : never} ExtractGeneric
- */
+/** @template TModel @typedef {import('./types').TableJoinMetadata<TModel>} TableJoinMetadata */
+/** @template TModel @typedef {import('./types').WhereBuilderFunction<TModel>} WhereBuilderFunction */
+/** @template TModel @typedef {import('./types').OrderByBuilderFunction<TModel>} OrderByBuilderFunction */
+/** @template TModel @typedef {import('./types').GroupByBuilderFunction<TModel>} GroupByBuilderFunction */
+/** @template TModel @typedef {import('./types').ExtractModel<TModel>} ExtractModel */
+/** @typedef {import('./types').TableContextOptions} TableContextOptions */
+/** @typedef {import('./types').OnConnectHandler} OnConnectHandler */
+/** @typedef {import('./types').CommandHandler} CommandHandler */
+/** @typedef {import('./types').CommandFailedHandler} CommandFailedHandler */
+/** @typedef {import('./types').GroupByAliases} GroupByAliases */
+/** @typedef {import('./types').AbstractModel} AbstractModel */
 
-/**
- * Function template that accepts a WhereBuilder class object argument parameter and returns a WhereBuilder class object.
- * @template TTableModel Model that represents the Table where the WHERE clause is being built.
- * @callback WhereBuilderFunction
- * @param {WhereBuilder<TTableModel>} where WhereBuilder class object that can be used to assist in building a WHERE clause.
- * @returns {WhereBuilder<TTableModel>} The WhereBuilder class object that was built.
- */
-
-/**
- * Function template that accepts a OrderBuilder class object argument parameter and returns a WhereBuilder class object.
- * @template TTableModel Model that represents the Table where the WHERE clause is being built.
- * @callback OrderByBuilderFunction
- * @param {OrderBuilder<TTableModel>} order OrderBuilder class object that can be used to assist in building an ORDER BY clause.
- * @returns {OrderBuilder<TTableModel>} The OrderBuilder class object that was built.
- */
-
-/**
- * Function template that accepts a GroupBuilder class object argument parameter and returns a WhereBuilder class object.
- * @template TTableModel Model that represents the Table where the WHERE clause is being built.
- * @callback GroupByBuilderFunction
- * @param {GroupBuilder<TTableModel>} group GroupBuilder class object that can be used to assist in building an ORDER BY clause.
- * @returns {GroupBuilder<TTableModel>} The GroupBuilder class object that was built.
- */
-
-/**
- * @typedef {Object} TableContextOptions
- * @property {boolean=} allowUpdateOnAll
- * @property {boolean=} allowTruncation
- */
-
-/**
- * Callback function on a Connection Pool handled by the emission of when a context connects to the Connection Pool.
- * @callback OnConnectHandler
- * @param {string} dateIso Date in ISO string format
- * @param {string} host Host of the MySQL server
- * @param {string} schema Schema of database and table in format of [database].[dbo].[table]
- */
-
-/**
- * Callback function on a Connection Pool handled by the emission of when a context sends a command to be executed.
- * @callback CommandHandler
- * @param {string} dateIso Date in ISO string format
- * @param {string} host Host of the MySQL server
- * @param {string} schema Schema of database and table in format of [database].[dbo].[table]
- * @param {string} cmdRaw Command in its raw format, including arguments.
- * @param {string} cmdSanitized Command in its sanitized format.
- * @param {any[]} args Arguments that were passed in with the sanitized format.
- */
-
-/**
- * Callback function on a Connection Pool handled by the emission of when a context sends a command and that command fails.
- * @callback CommandFailedHandler
- * @param {import('mysql2').QueryError} error Error thrown by mysql2
- * @param {string} dateIso Date in ISO string format
- * @param {string} host Host of the MySQL server
- * @param {string} schema Schema of database and table in format of [database].[dbo].[table]
- * @param {string} cmdRaw Command in its raw format, including arguments.
- * @param {string} cmdSanitized Command in its sanitized format.
- * @param {any[]} args Arguments that were passed in with the sanitized format.
- */
 
 /**
  * Object that holds context to a specific Table in your MySQL database. To ensure type-safety in vanilla JavaScript, use JSDOC typing.
- * @template {{[key: string]: any}} TTableModel Model that represents the Table this Context represents.
- * Auto Increment Primary Key name that is represented in the definition of the Primary Key in the table this context represents.
+ * @template {AbstractModel} TTableModel Model that represents the Table this Context represents.
  */
 export class MySqlTableContext {
-    /** @readonly @type {'table-context-connected'} Event fired when the Table Context connects. */
+    /** @private @readonly @type {'table-context-connected'} Event fired when the Table Context connects. */
     static EVENT_TABLE_CONTEXT_CONNECTED = 'table-context-connected';
-    /** @readonly @type {'table-context-query'} Event fired when the Table Context queries. */
+    /** @private @readonly @type {'table-context-query'} Event fired when the Table Context queries. */
     static EVENT_TABLE_CONTEXT_QUERY = 'table-context-query';
-    /** @readonly @type {'table-context-query-failed'} Event fired when the Table Context inserts. */
+    /** @private @readonly @type {'table-context-query-failed'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_QUERY_FAILED = 'table-context-query-failed';
-    /** @readonly @type {'table-context-insert'} Event fired when the Table Context inserts. */
+    /** @private @readonly @type {'table-context-insert'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_INSERT = 'table-context-insert';
-    /** @readonly @type {'table-context-insert-failed'} Event fired when the Table Context inserts. */
+    /** @private @readonly @type {'table-context-insert-failed'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_INSERT_FAILED = 'table-context-insert-failed';
-    /** @readonly @type {'table-context-update'} Event fired when the Table Context updates. */
+    /** @private @readonly @type {'table-context-update'} Event fired when the Table Context updates. */
     static EVENT_TABLE_CONTEXT_UPDATE = 'table-context-update';
-    /** @readonly @type {'table-context-update-failed'} Event fired when the Table Context inserts. */
+    /** @private @readonly @type {'table-context-update-failed'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_UPDATE_FAILED = 'table-context-update-failed';
-    /** @readonly @type {'table-context-delete'} Event fired when the Table Context deletes. */
+    /** @private @readonly @type {'table-context-delete'} Event fired when the Table Context deletes. */
     static EVENT_TABLE_CONTEXT_DELETE = 'table-context-delete';
-    /** @readonly @type {'table-context-delete-failed'} Event fired when the Table Context inserts. */
+    /** @private @readonly @type {'table-context-delete-failed'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_DELETE_FAILED = 'table-context-delete-failed';
 
-    /** @protected @type {import('mysql2/promise').Pool} */_pool;
+    /** @protected @type {MySql2Pool} */_pool;
     /** @protected @type {string} */ _table;
     /** @protected @type {keyof TTableModel|null} */ _pKey;
-    /** @protected @type {import('mysql2/promise').Connection} */ _cnn;
-    /** @protected @type {Promise<import('mysql2/promise').Connection>} */ _cnnPromise;
+    /** @protected @type {MySql2Connection} */ _cnn;
+    /** @protected @type {Promise<MySql2Connection} */ _cnnPromise;
     /** @protected @type {TableContextOptions} */ _options;
     /** @protected @type {keyof TTableModel|null} */ _joinKey;
 
     /**
      * Creates a Connection Pool ready for use inside of multiple MySqlTableContext objects.
-     * @param {import('mysql2/promise').PoolOptions} config Configuration to create the pool on.
-     * @returns {import('mysql2/promise').Pool} Connection Pool.
+     * @param {MySql2Pool|MySql2PoolOptions} config Configuration to create the pool on.
+     * @returns {MySql2Pool} Connection Pool.
      */
     static createPool(config) {
         return createPool({ ...config, decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20 });
@@ -116,7 +64,7 @@ export class MySqlTableContext {
     /**
      * Creates a new MySQL table context given the mysql2 config options. The user may also pass in an existing "Pool" object too, 
      * which allows this context to work alongside other contexts.
-     * @param {import('mysql2/promise').PoolOptions|import('mysql2/promise').Pool} configOrPool MySql2 config options to create a Pool object with or an existing Pool.
+     * @param {MySql2Pool|MySql2PoolOptions} configOrPool MySql2 config options to create a Pool object with or an existing Pool.
      * @param {string} table Name of the Table this context is connecting to.
      * @param {keyof TTableModel|null} aiKey Primary key of the table that auto increments. If there is none, then leave null.
      * @param {TableContextOptions} options Context options that enable certain features.
@@ -152,11 +100,11 @@ export class MySqlTableContext {
                 throw Error("Unrecognized SQL query.");
             }
             args?.forEach(a => cmdRaw = cmdRaw.replace('?', a));
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY}-${this._table}`, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
             const [result] = await this._pool.query(cmd, args);
             return /** @type {TTableModel[]} */ (result);
         } catch(err) {
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY_FAILED, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args)
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY_FAILED}-${this._table}`, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args)
         }
         return [];
     }
@@ -185,11 +133,11 @@ export class MySqlTableContext {
                 });
             }
             args?.forEach(a => cmdRaw = cmdRaw.replace('?', a));
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
-            const [result] = /** @type {import('mysql2').ResultSetHeader[]} */ (await this._pool.execute(cmd, args));
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT}-${this._table}`, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            const [result] = /** @type {MySql2ResultSetHeader[]} */ (await this._pool.execute(cmd, args));
             return Array.from(Array(result.affectedRows).keys()).map((_,n) => n + result.insertId);
         } catch(err) {
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT_FAILED, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT_FAILED}-${this._table}`, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
         }
         return [];
     }
@@ -218,11 +166,11 @@ export class MySqlTableContext {
                 });
             }
             args?.forEach(a => cmdRaw = cmdRaw.replace('?', a));
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
-            const result = /** @type {import('mysql2').ResultSetHeader} */ ((await this._pool.execute(cmd, args))[0]);
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE}-${this._table}`, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            const result = /** @type {MySql2ResultSetHeader} */ ((await this._pool.execute(cmd, args))[0]);
             return result.affectedRows;
         } catch(err) {
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE_FAILED, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE_FAILED}-${this._table}`, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
         }
         return 0;
     }
@@ -242,11 +190,11 @@ export class MySqlTableContext {
                 throw Error("Unrecognized SQL update command.");
             }
             args?.forEach(a => cmdRaw = cmdRaw.replace('?', a));
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
-            const result = /** @type {import('mysql2').ResultSetHeader} */ ((await this._pool.execute(cmd, args))[0]);
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE}-${this._table}`, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args);
+            const result = /** @type {MySql2ResultSetHeader} */ ((await this._pool.execute(cmd, args))[0]);
             return result.affectedRows;
         } catch(err) {
-            this._pool.emit(MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE_FAILED, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args)
+            this._pool.emit(`${MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE_FAILED}-${this._table}`, err, new Date().toISOString(), this._cnn.config.host, `[${this._cnn.config.database}].[dbo].[${this._table}]`, cmdRaw, cmd, args)
         }
         return 0;
     }
@@ -272,7 +220,7 @@ export class MySqlTableContext {
      * @param {OrderByBuilderFunction<TTableModel>?} orderBy Builder function to help build an ORDER BY clause.
      * @param {GroupByBuilderFunction<TTableModel>?} groupBy Builder function to help build a GROUP BY clause.
      * @param {(keyof TTableModel)[]?} distinct List of column names under this TableContext to select distinctively off of.
-     * @returns {Promise<(TTableModel & Partial<import('./builders.js').GroupByAliases>)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
+     * @returns {Promise<(TTableModel & GroupByAliases)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
      */
     async get(limit, offset = 0, where = null, orderBy = null, groupBy = null, distinct = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
@@ -292,7 +240,7 @@ export class MySqlTableContext {
      * @param {OrderByBuilderFunction<TTableModel>?} orderBy Builder function to help build an ORDER BY clause.
      * @param {GroupByBuilderFunction<TTableModel>?} groupBy Builder function to help build a GROUP BY clause.
      * @param {(keyof TTableModel)[]?} distinct List of column names under this TableContext to select distinctively off of.
-     * @returns {Promise<(TTableModel & Partial<import('./builders.js').GroupByAliases>)[]>} 
+     * @returns {Promise<(TTableModel & GroupByAliases)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
     */
     async getAll(where = null, orderBy = null, groupBy = null, distinct = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
@@ -435,112 +383,153 @@ export class MySqlTableContext {
     }
 
     /**
-     * @this {MySqlTableContext<TTableModel>}
-     * @template {MySqlTableContext} TJoiningTableContext
-     * @template {ExtractGeneric<TJoiningTableContext>} TJoiningModel
-     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table
-     * @param {{name?: string, key: string}} leftData
-     * @param {{name?: string, key: string}} rightData
-     * @returns {MySqlJoinContext<TTableModel, TJoiningModel>}
+     * Joins this table with another table to yield only matching results of this table and the other table.
+     * As of right now, you can only join on one condition.
+     * @template {MySqlTableContext} TJoiningTableContext The MySqlTableContext to join with
+     * @template {ExtractModel<TJoiningTableContext>} [TJoiningModel=ExtractModel<TJoiningTableContext>]
+     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table MySqlTableContext that is not already a joined table.
+     * @param {{name?: string, key: string}} leftData Metadata to specify for how the left table will join.
+     * @param {{name?: string, key: string}} rightData Metadata to specify for how the right table will join.
+     * @returns {MySqlJoinContext<TTableModel, TJoiningModel>} A new MySqlJoinContext that has only query access.
      */
     join(table, leftData, rightData) {
         return new MySqlJoinContext(this, table, leftData, rightData);
     }
 
     /**
-     * @this {MySqlTableContext<TTableModel>}
-     * @template {MySqlTableContext} TJoiningTableContext
-     * @template {ExtractGeneric<TJoiningTableContext>} TJoiningModel
-     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table
-     * @param {{name?: string, key: string}} leftData
-     * @param {{name?: string, key: string}} rightData
-     * @returns {MySqlLeftJoinContext<TTableModel, TJoiningModel>}
+     * Joins this table with another table to yield all results of this table, and any matching results of the other table.
+     * As of right now, you can only join on one condition.
+     * @template {MySqlTableContext} TJoiningTableContext The MySqlTableContext to join with
+     * @template {ExtractModel<TJoiningTableContext>} [TJoiningModel=ExtractModel<TJoiningTableContext>]
+     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table MySqlTableContext that is not already a joined table.
+     * @param {{name?: string, key: string}} leftData Metadata to specify for how the left table will join.
+     * @param {{name?: string, key: string}} rightData Metadata to specify for how the right table will join.
+     * @returns {MySqlJoinContext<TTableModel, TJoiningModel, TTableModel & Partial<TJoiningModel>>} A new MySqlJoinContext that has only query access.
      */
     leftJoin(table, leftData, rightData) {
-        return new MySqlLeftJoinContext(this, table, leftData, rightData);
+        return new MySqlJoinContext(this, table, leftData, rightData, "LEFT");
+    }
+
+    /**
+     * Joins this table with another table to yield all results of the other table, and any matching results of this table.
+     * As of right now, you can only join on one condition.
+     * @template {MySqlTableContext} TJoiningTableContext The MySqlTableContext to join with
+     * @template {ExtractModel<TJoiningTableContext>} [TJoiningModel=ExtractModel<TJoiningTableContext>]
+     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table MySqlTableContext that is not already a joined table.
+     * @param {{name?: string, key: string}} leftData Metadata to specify for how the left table will join.
+     * @param {{name?: string, key: string}} rightData Metadata to specify for how the right table will join.
+     * @returns {MySqlJoinContext<TTableModel, TJoiningModel, Partial<TTableModel> & TJoiningModel>} A new MySqlJoinContext that has only query access.
+     */
+    rightJoin(table, leftData, rightData) {
+        return new MySqlJoinContext(table, this, leftData, rightData, "RIGHT");
+    }
+
+    /**
+     * Joins this table with another table to yield all results of the other table, and any matching results of this table.
+     * As of right now, you can only join on one condition.
+     * @template {MySqlTableContext} TJoiningTableContext The MySqlTableContext to join with
+     * @template {ExtractModel<TJoiningTableContext>} [TJoiningModel=ExtractModel<TJoiningTableContext>]
+     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table MySqlTableContext that is not already a joined table.
+     * @param {{name?: string, key: string}} leftData Metadata to specify for how the left table will join.
+     * @param {{name?: string, key: string}} rightData Metadata to specify for how the right table will join.
+     * @returns {MySqlJoinContext<TTableModel, TJoiningModel, Partial<TTableModel> & Partial<TJoiningModel>>} A new MySqlJoinContext that has only query access.
+     */
+    fullJoin(table, leftData, rightData) {
+        return new MySqlJoinContext(table, this, leftData, rightData, "CROSS");
+    }
+
+    /**
+     * Joins this table with another table to yield all results of the other table, and any matching results of this table.
+     * As of right now, you can only join on one condition.
+     * @template {MySqlTableContext} TJoiningTableContext The MySqlTableContext to join with
+     * @template {ExtractModel<TJoiningTableContext>} [TJoiningModel=ExtractModel<TJoiningTableContext>]
+     * @param {Exclude<TJoiningTableContext, MySqlJoinContext>} table MySqlTableContext that is not already a joined table.
+     * @param {{name?: string, key: string}} leftData Metadata to specify for how the left table will join.
+     * @param {{name?: string, key: string}} rightData Metadata to specify for how the right table will join.
+     * @returns {MySqlJoinContext<TTableModel, TJoiningModel, Partial<TTableModel> & Partial<TJoiningModel>>} A new MySqlJoinContext that has only query access.
+     */
+    crossJoin(table, leftData, rightData) {
+        return new MySqlJoinContext(table, this, leftData, rightData, "CROSS");
     }
 
     /**
      * Adds a listener event to the Connection Pool associated with this Table Context whenever a new connection is opened on the pool.
-     * This Event Listener will be triggered by all TableContexts that use this Pool.
      * @param {OnConnectHandler} handler Function that executes when a connection is made to this context.
      */
     onConnect(handler) {
-        this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_CONNECTED, handler);
+        this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_CONNECTED}-${this._table}`, handler);
     }
 
     /**
      * Adds a listener event to the Connection Pool associated with this Table Context whenever a Query command is executed on the pool.
-     * This Event Listener will be triggered by all TableContexts that use this Pool.
      * @param {CommandHandler} handler Function that executes when a query command is executed on this context.
      * @param {CommandFailedHandler=} failHandler Function that executes when a query command failed execution on this context.
      */
     onQuery(handler, failHandler = undefined) {
         if (failHandler) {
-            this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY_FAILED, failHandler);
+            this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY_FAILED}-${this._table}`, failHandler);
         }
-        this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY, handler);
+        this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_QUERY}-${this._table}`, handler);
     }
 
     /**
      * Adds a listener event to the Connection Pool associated with this Table Context whenever an Insert command is executed on the pool.
-     * This Event Listener will be triggered by all TableContexts that use this Pool.
      * @param {CommandHandler} handler Function that executes when an insert command is executed on this context.
      * @param {CommandFailedHandler=} failHandler Function that executes when an insert command failed execution on this context.
      */
     onInsert(handler, failHandler = undefined) {
         if (failHandler) {
-            this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT_FAILED, failHandler);
+            this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT_FAILED}-${this._table}`, failHandler);
         }
-        this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT, handler);
+        this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_INSERT}-${this._table}`, handler);
     }
 
     /**
      * Adds a listener event to the Connection Pool associated with this Table Context whenever an Update command is executed on the pool.
-     * This Event Listener will be triggered by all TableContexts that use this Pool.
      * @param {CommandHandler} handler Function that executes when an update command is executed on this context.
      * @param {CommandFailedHandler=} failHandler Function that executes when an update command failed execution on this context.
      */
     onUpdate(handler, failHandler = undefined) {
         if (failHandler) {
-            this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE_FAILED, failHandler);
+            this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE_FAILED}-${this._table}`, failHandler);
         }
-        this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE, handler);
+        this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_UPDATE}-${this._table}`, handler);
     }
 
     /**
      * Adds a listener event to the Connection Pool associated with this Table Context whenever a Delete command is executed on the pool.
-     * This Event Listener will be triggered by all TableContexts that use this Pool.
      * @param {CommandHandler} handler Function that executes when a delete command is executed on this context.
      * @param {CommandFailedHandler=} failHandler Function that executes when a delete command failed execution on this context.
      */
     onDelete(handler, failHandler = undefined) {
         if(failHandler) {
-            this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE_FAILED, failHandler);
+            this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE_FAILED}-${this._table}`, failHandler);
         }
-        this._pool.addListener(MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE, handler);
+        this._pool.addListener(`${MySqlTableContext.EVENT_TABLE_CONTEXT_DELETE}-${this._table}`, handler);
     }
 }
 
 /**
- * @template {{[key: string]: any}} TLeftTableModel
- * @template {{[key: string]: any}} TRightTableModel
- * @template {Partial<TLeftTableModel> & Partial<TRightTableModel>} [TJoinedModel=TLeftTableModel & TRightTableModel]
+ * Object that holds context to a specific Table in your MySQL database. To ensure type-safety in vanilla JavaScript, use JSDOC typing.
+ * @template {AbstractModel} TLeftTableModel model object that represents the left-side Table being joined.
+ * @template {AbstractModel} TRightTableModel model object that represents the right-side Table being joined.
+ * @template {AbstractModel} [TJoinedModel=TLeftTableModel & TRightTableModel]
  * @extends {MySqlTableContext<TJoinedModel>}
  */
 export class MySqlJoinContext extends MySqlTableContext {
     /** @private @type {string[]} */ columns = [];
     /** @private @type {MySqlTableContext<?>[]} */ tables = [];
-    /** @protected @type {"JOIN"|"LEFT JOIN"|"RIGHT JOIN"|"OUTER JOIN"} */ joinType;
+
+    /** @protected @type {"INNER"|"LEFT"|"RIGHT"|"CROSS"} Type of JOIN being done on the tables in this context. */ joinType;
 
     /**
      * @param {MySqlTableContext<TLeftTableModel>} leftTable 
      * @param {Exclude<MySqlTableContext<TRightTableModel>, MySqlJoinContext>} rightTable 
-     * @param {{name?: string, key: keyof TLeftTableModel}} leftData
-     * @param {{name?: string, key: keyof TRightTableModel}} rightData
-     * @param {"JOIN"|"LEFT JOIN"|"RIGHT JOIN"|"OUTER JOIN"} joinType
+     * @param {TableJoinMetadata<TLeftTableModel>} leftData
+     * @param {TableJoinMetadata<TRightTableModel>} rightData
+     * @param {"INNER"|"LEFT"|"RIGHT"|"CROSS"} joinType
      */
-    constructor(leftTable, rightTable, leftData, rightData, joinType="JOIN") {
+    constructor(leftTable, rightTable, leftData, rightData, joinType="INNER") {
         // @ts-ignore Ignoring as we need access to the tables protected variables that were passed in. (in other languages, this is allowed.)
         let pool = leftTable._pool;
 
@@ -565,34 +554,20 @@ export class MySqlJoinContext extends MySqlTableContext {
             // @ts-ignore Ignoring as we need access to the tables protected variables that were passed in. (in other languages, this is allowed.)
             const leftName = left._table, rightName = right._table, leftJKey = left._joinKey, rightJKey = right._joinKey;
             if (i == 0) joinPart += leftName;
-            joinPart += ` ${left instanceof MySqlJoinContext ? left.joinType : this.joinType} ${rightName} ON ${leftData.name ?? leftName}.${String(leftJKey)} = ${rightData.name ?? rightName}.${String(rightJKey)}`;
+            joinPart += ` ${left instanceof MySqlJoinContext ? left.joinType : this.joinType} JOIN ${rightName} ON ${leftData.name ?? leftName}.${String(leftJKey)} = ${rightData.name ?? rightName}.${String(rightJKey)}`;
         }
-        this._table = joinPart;
         this.columns = this.tables.flatMap(t => {
             // @ts-ignore Ignoring as we need access to the tables protected variables that were passed in. (in other languages, this is allowed.)
-            const pKey = String(t._pKey), tName = t._table;
-            if (pKey != null && !(t instanceof MySqlLeftJoinContext)) {
-                return [`${tName}.${pKey} AS ${this._augmentField(tName,pKey)}__`, `${tName}.*`];
+            const pKey = String(t._pKey), tName = joinPart;
+            if (pKey != null && !(t instanceof MySqlJoinContext)) {
+                return [`${tName}.${pKey} AS ${this._augmentField(tName,pKey)}`, `${tName}.*`];
             }
             return [];
         });
-    }
 
-    /**
-     * @template {string} TString1
-     * @template {string} TString2
-     * @typedef {`__${TString1}_${TString2}__`} AugmentString
-     */
-
-    /**
-     * @template {string} TTableName
-     * @template {string} TColumnName
-     * @param {TTableName} tableName 
-     * @param {TColumnName} columnName 
-     * @returns {AugmentString<TTableName, TColumnName>}
-     */
-    _augmentField(tableName, columnName) {
-        return `__${tableName}_${columnName}__`
+        // Set the table name appropriately so the event listener has an appropriate name.
+        // @ts-ignore Ignoring as we need access to the tables protected variables that were passed in. (in other languages, this is allowed.)
+        this._table = this.tables.map(t => t._table).join('-join-');
     }
 
     /**
@@ -604,7 +579,7 @@ export class MySqlJoinContext extends MySqlTableContext {
      * @param {OrderByBuilderFunction<TJoinedModel>?} orderBy Builder function to help build an ORDER BY clause.
      * @param {GroupByBuilderFunction<TJoinedModel>?} groupBy Builder function to help build a GROUP BY clause.
      * @param {(keyof TJoinedModel)[]?} distinct List of column names under this TableContext to select distinctively off of.
-     * @returns {Promise<(TJoinedModel & Partial<import('./builders.js').GroupByAliases>)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
+     * @returns {Promise<(TJoinedModel & GroupByAliases)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
      */
     async get(limit, offset = 0, where = null, orderBy = null, groupBy = null, distinct = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
@@ -625,7 +600,7 @@ export class MySqlJoinContext extends MySqlTableContext {
      * @param {OrderByBuilderFunction<TJoinedModel>?} orderBy Builder function to help build an ORDER BY clause.
      * @param {GroupByBuilderFunction<TJoinedModel>?} groupBy Builder function to help build a GROUP BY clause.
      * @param {(keyof TJoinedModel)[]?} distinct List of column names under this TableContext to select distinctively off of.
-     * @returns {Promise<(TJoinedModel & Partial<import('./builders.js').GroupByAliases>)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
+     * @returns {Promise<(TJoinedModel & GroupByAliases)[]>} A list of TTableModel models. If a GROUP BY clause was built, then some extra aliases are added.
      */
     async getAll(where = null, orderBy = null, groupBy = null, distinct = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
@@ -634,7 +609,6 @@ export class MySqlJoinContext extends MySqlTableContext {
         let cmd = `SELECT ${distinct != null ? `DISTINCT ${distinct.join(',')}` : _groupBy.getSelects() == "*" ? this.columns.join(',') : _groupBy.getSelects()} `
             + `FROM ${this._table}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `;
         const ts = await this._query(cmd, _where.getArgs());
-        // @ts-ignore Ignoring because I think it works.
         return ts;
     }
 
@@ -690,28 +664,25 @@ export class MySqlJoinContext extends MySqlTableContext {
     async truncate() {
         throw Error('Cannot truncate on joined tables.');
     }
-}
-
-/**
- * @template {{[key: string]: any}} TLeftTableModel
- * @template {{[key: string]: any}} TRightTableModel
- * @template {TLeftTableModel & Partial<TRightTableModel>} [TJoinedModel=TLeftTableModel & Partial<TRightTableModel>]
- * @extends {MySqlJoinContext<TLeftTableModel, TRightTableModel, TJoinedModel>}
- */
-export class MySqlLeftJoinContext extends MySqlJoinContext {
-    /** @protected @type {"JOIN"|"LEFT JOIN"|"RIGHT JOIN"|"OUTER JOIN"} */ joinType;
 
     /**
-     * @param {MySqlTableContext<TLeftTableModel>} leftTable 
-     * @param {MySqlTableContext<TRightTableModel>} rightTable 
-     * @param {{name?: string, key: keyof TLeftTableModel}} leftData
-     * @param {{name?: string, key: keyof TRightTableModel}} rightData
+     * @private
+     * @template {string} TTableName
+     * @template {string} TColumnName
+     * @param {TTableName} tableName 
+     * @param {TColumnName} columnName 
+     * @returns {AugmentString<TTableName, TColumnName>}
      */
-    constructor(leftTable, rightTable, leftData, rightData) {
-        super(leftTable, rightTable, leftData, rightData, "LEFT JOIN");
+    _augmentField(tableName, columnName) {
+        return `__${tableName}_${columnName}__`
     }
 }
 
+/**
+ * @template {string} TString1
+ * @template {string} TString2
+ * @typedef {`__${TString1}_${TString2}__`} AugmentString
+ */
 
 /**
  * Creates a new AliasMap where the Key can be any string but the value to that key must be a key of TModel

@@ -1,10 +1,43 @@
 # mysql-contexts
 
+This README is still under construction. If you have dire questions, try to see the source code, everything should be documented fairly well.
+
 mysql-contexts provides a strongly-typed, easy way to interact with your MySQL database by interfacing and building commands for a single table through the mysql2 connector.
 
 # Table of Contents
- - [Chinook Database Schema](#chinook-database-schema)
- - [Creating Table Contexts](#creating-table-contexts)
+  - [Documentation](#documentation)
+  - [Chinook Database Schema](#chinook-database-schema)
+  - [Creating Table Contexts](#creating-table-contexts)
+    - [Type defining your Table](#type-defining-your-table-for-chinook)
+      - [Creating your SQL context](#creating-your-sql-context-for-chinook)
+      - [Constructor](#constructor)
+      - [Examples](#examples)
+  - [Querying](#querying)
+    - [get(limit[, offset, where, orderBy, groupBy, distinct])](#async-getlimit-offset0-wherenull-orderbynull-groupbynull-distinctnull)
+    - [getAll([where, orderBy, groupBy, distinct])](#async-getallwherenull-orderbynull-groupbynull-distinctnull)
+    - [count([where, distinct])](#async-countwherenull-distinctnull)
+    - [WHERE clause](#where-clause)
+      - [WhereBuilder & WhereBuilderFunction](#wherebuilder-and-wherebuilderfunction)
+      - [Negating](#negating)
+      - [Nested Conditions](#nested-conditionals-for-where)
+    - [ORDER BY clause](#order-by-clause)
+    - [GROUP BY clause](#group-by-clause)
+    - [DISTINCT clause](#distinct-clause)
+  - [Inserting](#inserting)
+  - [Updating](#updating)
+  - [Deleting](#deleting)
+  - [Joining Tables](#joining-tables)
+    - [(INNER) JOIN](#inner-join)
+    - [LEFT (INNER) JOIN](#left-inner-join)
+    - [RIGHT (INNER) JOIN](#right-inner-join)
+    - [CROSS/FULL JOIN](#crossfull-join)
+  - [Miscellaneous](#miscellaneous)
+  - [Built-in event listeners](#built-in-event-listeners)
+  - [Future plans](#future-plans)
+
+# Documentation
+
+The website to see all of the documentation is under construction.
 
 # Chinook Database Schema
 
@@ -16,7 +49,7 @@ However, I found the .sql files they provide do not work with MySQL, so in this 
 
 As mysql-contexts implies, the core of this library allows you to create a MySQL Table Context for usage of interacting with that Table in MySQL. This library is most powerful when you use it with TypeScript or JSDOC typing. Although, the typing in mysql-contexts is done in JSDOC typing, this tutorial will be using TypeScript for readability sake.
 
-## Type defining your Table for chinook.dbo.Customer
+## Type defining your Table for chinook
 
 Since this acts as an interface, your types should perfectly resemble your Table as it appears in your database. The below example is how the Customer record interface should look that will act as the primary model object connected to the Customer table in our chinook database.
 
@@ -59,7 +92,7 @@ interface Customer {
 
 As you can see, nullable types, as defined in the database, have "?" appended after their property key in the interface. This isn't important, but can definitely stump you later on if you don't define it correctly.
 
-## Creating your SQL context for chinook.dbo.Customer
+## Creating your SQL context for chinook
 
 In the last section, we created an interface for our Chinook database table, "Customer". Now we will create a Table Context to provide an interface to our Table.
 
@@ -105,11 +138,11 @@ const customerCtx = new MySqlTableContext<Customer>(pool, "Customer", "Id");
 
 Congratulations, you just set up a Table Context to interface to chinook.dbo.Customer. You can alter this code however you like to attach to many different tables.
 
-## Querying from chinook
+# Querying
 
 We were able to create our MySqlTableContext, now we want to query from it. Querying from your context may be a little strange at first. The main two functions for querying is "get" and "getAll".
 
-### async get(limit, offset=0, where=null, orderBy=null, groupBy=null, distinct=null);
+## async get(limit, offset=0, where=null, orderBy=null, groupBy=null, distinct=null);
 
 The "get" function is for grabbing an arbitrary amount of records, specified by the {limit} argument. You can add in more arguments to further cleanse your query.  
 Here is a list of all of the arguments and their descriptions.
@@ -216,7 +249,7 @@ The above output will show:
 
 You can see more information on clauses starting in the [WHERE clause](#where-clause) section.
 
-### async getAll(where=null, orderBy=null, groupBy=null, distinct=null);
+## async getAll(where=null, orderBy=null, groupBy=null, distinct=null);
 
 The "getAll" function is for grabbing all records from the table. You can add in certain arguments to further cleanse your query.  
 Here is a list of all of the arguments and their descriptions.
@@ -238,7 +271,7 @@ customerCtx.getAll();
 
 ```
 
-### async count(where=null, groupByOrDistinctColumns=null)
+## async count(where=null, distinct=null)
 
 The "count" function is for grabbing the number of records in the database. You can add certain arguments to further limit the number of records you are querying for.  
 Here is a list of all of the arguments and their descriptions.
@@ -261,7 +294,7 @@ customerCtx.count(null, ["Country"]);
 // builds the Query: SELECT COUNT(DISTINCT Country) AS count FROM Customer;
 ```
 
-### WHERE clause
+## WHERE clause
 
 Running queries is one thing, but the data you get back is pointless unless you can filter on them. You could use the "getAll" function and then use JavaScript's built in [filter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter) function, but that could be pulling in a LOT of data into memory.
 
@@ -376,7 +409,7 @@ customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastNa
 
 While nested conditionals can get messy, they may be useful in certain situations.
 
-### ORDER BY clause
+## ORDER BY clause
 
 Building your ORDER BY clause doesn't get as complex as your WHERE clause, but like all clauses in mysql-contexts, clauses will appear very similarly.  
 
@@ -414,7 +447,7 @@ customerCtx.getAll(null, order => order.by("CustomerId").desc().by("CustomerId")
 // builds the Query: SELECT * FROM Customer ORDER BY SupportRepId DESC, CustomerId;
 ```
 
-### GROUP BY clause
+## GROUP BY clause
 
 __NOTE: The GROUP BY clause is not optimized nor tested thoroughly, so this may have bugs.__
 
@@ -448,7 +481,7 @@ employeeCtx.getAll(null, null, group => group.by("Country").byYear("HireDate"));
 // builds the Query: SELECT COUNT(*) as count, Country, YEAR(HireDate) as year FROM Employee GROUP BY Country, YEAR(HireDate);
 ```
 
-### DISTINCT clause
+## DISTINCT clause
 
 Although, the DISTINCT keyword isn't necessarily a clause itself, it is described as such since it somewhat belongs in this group.
 
@@ -467,34 +500,36 @@ customerCtx.getAll(null, null, null, ["Country", "City"]);
 // builds the Query: SELECT DISTINCT Country FROM Customer;
 ```
 
-## Inserting into chinook
+# Inserting
 
 With knowing how to query from our database using our context, we also need to know how to insert into our database. The two main functions for inserting are "insert" and "insertMany".
 
-## Updating records in chinook
+# Updating
 
 The update commands have access to the WHERE clause builder function. You can reference adding WHERE clauses [here](#where-clause)
 
 
-## Deleting records from chinook
+# Deleting
 
-## Joining tables
+# Joining tables
 
-### (INNER) JOIN
+Joining tables is a little bit more intuitive, but is still just as simple as any of the simple interaction commands.
 
-### OUTER JOIN
+__NOTE: As of version 1.0.2, you can only join on a singular key. There are plans to make it so you can add AND and OR conditionals.__
 
-### LEFT (INNER) JOIN
+## (INNER) JOIN
 
-### RIGHT (INNER) JOIN
+## OUTER JOIN
 
-### LEFT OUTER JOIN
+## LEFT (INNER) JOIN
 
-### RIGHT OUTER JOIN
+## RIGHT (INNER) JOIN
 
-## Miscellaneous
+## CROSS/FULL JOIN
 
-### Built-in listeners
+# Miscellaneous
+
+# Built-in event listeners
 
 The MySqlTableContext class has a few functions that allow you to add your own handlers to certain events.  
 Events are fired when the table does the following:
@@ -503,7 +538,7 @@ Events are fired when the table does the following:
  - Querying record(s)
  - Deleting record(s)
 
-# TODO
+# Future plans
 
 This section is dedicated to a list of future add-ons.
 
@@ -514,45 +549,3 @@ Right now, Table Contexts only interface to a simple command. Although, sub-quer
 ## Protect function arguments
 
 Right now, almost all functions implicitly handle the typing, making it so TypeScript and JSDOC users can easily keep up with the correct arguments to pass in. However, this library should also be used by vanilla JS users. Since that is the case, all functions should be protected by throwing errors for when the argument isn't what is expected.
-
-## LINQ-ish?
-
-Very far stretch, and likely would warrant its own package, but I would like to create LINQ-ish like syntax. 
-
-How would this be accomplished, you may ask? [JavaScript Proxies](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) and [Function Parsing](https://stackoverflow.com/questions/1007981/how-to-get-function-parameter-names-values-dynamically).
-As an example, the where function would get passed a Model object. This model object has no significant values, but the keys are what we would want to read. So instead, the model would be created under a Proxy that intercepts the get property and further assists constructing the WHERE clause. Finally, a function would be called by the end-user to commit the final command.
-
-e.g.,
-
-```
-customerCtx.where((model, $) => model.FirstName == $.Frank && model.LastName == "Harris").execute();
-```
-
-The proxying would look like:
-
-```
-class MySqlTableContext {
-  _columns = [];
-  _values = [];
-  pModel = new Proxy({}, {
-    get(target, prop) {
-      // here, we would pass the prop into our columns list.
-    }
-  });
-  p$ = new Proxy({}, {
-    get(target, prop) {
-      // here, we would pass the prop into our values list.
-    }
-  });
-  where = new Proxy((model) => this._where, {
-    apply(target, prop, args) {
-      if(args.length <= 0) throw Error('no');
-      // here, we would parse for all the conditional operators to determine what SQL command to build. (e.g., ==, !=, >, >=, <, <=, &&, ||, !)
-      args[0](pModel, p$);
-      return where;
-    }
-  });
-}
-```
-
-The drawback with this would mean there needs to be a lot of parsing of anonymous functions, which could be very costly and make 

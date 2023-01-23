@@ -1,7 +1,8 @@
 //@ts-check
-/** @typedef {{ count: number|undefined, yearDay: string, yearWeek: string, yearMonth: string, year: string }} GroupByAliases  */
+/** @template TModel @template TKey @typedef {import('./types').KeyByValueType<TModel,TKey>} KeyByValueType */
+/** @template TModel @typedef {import('./types').OrderByFunction<TModel>} OrderByFunction */
 
-/** @template T @template K @typedef {import('../type-toolbelt').KeyByValueType<T,K>} KeyByValueType */
+
 /**
  * Class used to help build WHERE conditionals on SQL statements using mysql2 library.
  * @template TTableModel Type representing the Table as it appears in the database.
@@ -482,9 +483,6 @@ export class WhereBuilder {
     }
 }
 
-/**
- * @template TTableModel @typedef {{ by: () => OrderByFunction<TTableModel>, asc: () => OrderBuilder, desc: () => OrderBuilder<TTableModel> }} OrderByFunction
- */
 
 /**
  * @template TTableModel
@@ -503,7 +501,10 @@ export class OrderBuilder {
         this._columns = [...this._columns, String(tKey)];
         const idx = this._columns.length;
         return {
-            by: (/** @type {keyof TTableModel} */tKey) => this.by(tKey),
+            by: (tKey) => {
+                this.by(tKey);
+                return this;
+            },
             asc: () => {
                 this._columns[idx] += " ASC";
                 return this;
@@ -549,7 +550,7 @@ export class GroupBuilder {
     byDay(tKey) {
         this.keys = [...this.keys, {
             key: `CONCAT(YEAR(${String(tKey)}), '/', DAY(${String(tKey)}))`,
-            alias: "yearDay"
+            alias: "$yearDay"
         }];
         return this;
     }
@@ -562,7 +563,7 @@ export class GroupBuilder {
     byWeek(tKey) {
         this.keys = [...this.keys, {
             key: `YEARWEEK(${String(tKey)})`,
-            alias: "yearWeek"
+            alias: "$yearWeek"
         }];
         return this;
     }
@@ -575,7 +576,7 @@ export class GroupBuilder {
     byMonth(tKey) {
         this.keys = [...this.keys, {
             key: `CONCAT(YEAR(${String(tKey)}), '/', MONTH(${String(tKey)}))`,
-            alias: "yearMonth"
+            alias: "$yearMonth"
         }];
         return this;
     }
@@ -588,7 +589,7 @@ export class GroupBuilder {
     byYear(tKey) {
         this.keys = [...this.keys, {
             key: `YEAR(${String(tKey)})`,
-            alias: "year"
+            alias: "$year"
         }];
         return this;
     }
