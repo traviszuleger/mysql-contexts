@@ -5,3 +5,4 @@ node_modules
 /src/out/*
 /src/jsdoc-conf.json
 package-lock.json
+README.md

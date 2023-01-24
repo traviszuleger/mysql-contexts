@@ -1,6 +1,6 @@
 {
     "name": "@tzuleger/mysql-contexts",
-    "version": "1.0.7",
+    "version": "1.0.9",
     "homepage": "http://pkgs.traviszuleger.com/mysql-contexts",
     "repository": {
         "type": "git",

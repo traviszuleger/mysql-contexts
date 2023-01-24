@@ -162,7 +162,7 @@ Given your represented Table has a key defined as an AUTO_INCREMENT key, then yo
 import MySqlTableContext from '@tzuleger/mysql-contexts';
 import type { Customer } from "./chinook-types";
 
-type CustomerWithAutoIncrementId = Customer & { Id: number }; // The aiKey argument has to be a keyof the interface the MySqlTableContext class object is tied to.
+type CustomerWithAutoIncrementId = Customer & { Id?: number }; // Assuming that there exists an AUTO_INCREMENT primary key on Customer called "Id".
 
 // Port is defaulted to 3306.
 const pool = MySqlTableContext.$createPool({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" });
@@ -173,7 +173,7 @@ const customerCtx = new MySqlTableContext<Customer>(pool, "Customer", "Id");
 
 Querying is simple and only involves calling some pre-defined functions. These functions are `.get()`, `.getAll()`, and `.count()`.  
 
-  - `.get(limit[, offset=0, where=null])`: Retrieves the first \{limit\} records offset by `offset`, given the conditions built by `where` __If nothing is passed into `order` and/or `where`, then nothing is built from those respective functions__
+  - `.get(limit[, offset=0, where=null])`: Retrieves the first `limit` records offset by `offset`, given the conditions built by `where` __If nothing is passed into `order` and/or `where`, then nothing is built from those respective functions__
   - `.getAll([where=null, orderBy=null, groupBy=null, distinct=[]])`: Retrieves all records (by `distinct` keys, or no distinction if not passed), which can be filtered on `where`, ordered by `orderBy`, grouped by `groupBy`. __If nothing is passed into these parameters, then nothing is built from those respective functions__
   - `.count([where=null])`: Retrieves the total number of records, which can be filtered on `where`. __If nothing is passed, then no clause is built__
 
@@ -206,7 +206,6 @@ Here is an example of how you build a WHERE clause:
 
 //  -- get all Customers named "Frank Harris" --
 customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris"));
-// builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND LastName='Harris';
 ```
 
 The above example builds the following command (not formatted to actual command that is sent):
@@ -317,14 +316,19 @@ const where: WhereBuilderFunction<Customer> = function(where: WhereBuilder<Custo
     where.equals("LastName", "Harris", where => where.orEquals("CustomerId", 16));
     return where;
 }
-
-//  -- get all Customers with the a full name of "Frank Harris" OR all Customers with the first name of "Frank" and a CustomerId of 16 --
-customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris", whereCustomerIdIs16));
-// builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND (LastName='Harris' OR CustomerId=16);
-
 // -- get all Customers who reside in the USA with a full name of "Frank Harris" OR all Customers who reside in the USA with just a first name of "Frank" and the CustomerId of 16. --
 customerCtx.getAll(where);
-// builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND (LastName='Harris' OR CustomerId=16) AND Country='USA';
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE FirstName='Frank' 
+        AND (LastName='Harris' 
+            OR CustomerId=16) 
+        AND Country='USA';
 ```
 
 ## ORDER BY clause
@@ -373,7 +377,6 @@ Here is an example of how you would build an ORDER BY clause chaining with multi
 ```ts
 // -- query to get all Customers descending ordered by their SupportRepId then ascending ordered by their CustomerId. --
 customerCtx.getAll(null, order => order.by("SupportRepId").desc().by("CustomerId"));
-// builds the Query: SELECT * FROM Customer ORDER BY SupportRepId DESC, CustomerId;
 ```
 
 The above example builds the following command (not formatted to actual command that is sent):
@@ -405,7 +408,7 @@ Here is an example of how you would build an ORDER BY clause:
 ```ts
 // ... initialization
 
-// -- get the number of Employees grouped by country. --
+// -- get the number of Customers grouped by country. --
 customerCtx.getAll(null, null, group => group.by("Country"));
 ```
 
@@ -414,7 +417,7 @@ The above example builds the following command (not formatted to actual command 
 ```sql
 SELECT COUNT(*) as count
     ,Country
-    FROM Employee 
+    FROM Customer
     GROUP BY Country
 ```
 
@@ -458,7 +461,6 @@ SELECT DISTINCT Country
 ```ts
 // -- get all countries and cities that Customers reside in  --
 customerCtx.getAll(null, null, null, ["Country", "City"]);
-// builds the Query: SELECT DISTINCT Country FROM Customer;
 ```
 
 The above example builds the following command (not formatted to actual command that is sent):
@@ -480,7 +482,7 @@ Inserting into our table is not as nearly as complex as any other class function
   - `.insertOne(record)`: Inserts one record into the table and returns the record inserted. If `autoIncrementKey` was specified in the constructor, then the returned record will have the new Id assigned to it.
   - `.insertMany(records)`: Inserts many records into the table and returns an array of the records inserted. If `autoIncrementKey` was specified in the constructor, then the returned records will all have their new Id assigned to them.
 
-__Important: If your table has an AUTO_INCREMENT column, and the record you're trying to insert has the key to that column, then that key will be deleted before it is inserted. Since it will be automatically assigned after getting inserted. Since this is the case, the one exception when typing your object models is making your primary key nullable IF AND ONLY IF that key is an AUTO_INCREMENT column. Otherwise, you CAN pass some unimportant data into that property (like 0), and the insert functions will handle it.__
+__Important: If your table has an AUTO_INCREMENT column, and the record you're trying to insert has the key to that column, then that key will be deleted before it is inserted, since it will be automatically assigned after getting inserted. With this being the case, the one exception when typing your object models is making your primary key nullable IF AND ONLY IF that key is an AUTO_INCREMENT column. Otherwise, if you want to maintain the integrity of your interface to the Table representation, you can keep key as a non-nullable and just pass some unimportant data into that property (like 0) when inserting.__
 
 Here is an example of inserting one record:
 
