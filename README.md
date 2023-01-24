@@ -116,19 +116,19 @@ __Note: Primary keys should be annotated as a non-nullable, but if the key is an
 
 ## Syntax of MySqlTableContext
 
-MySqlTableContext is its own class but also has a MySqlJoinContext extension. The MySqlJoinContext is involved with joining tables together-- You can read more about that (here)[#joing-tables]
+`MySqlTableContext` is its own class but also has a `MySqlJoinContext` extension. The `MySqlJoinContext` is involved with joining tables together-- You can read more about that (here)[#joing-tables]
 
-The constructor for a MySqlTableContext is defined as:
+The constructor for a `MySqlTableContext` is defined as:
 
 ```ts
 MySqlTableContext<MyTableModel>(configOrPool: MySql2PoolOptions|MySql2Pool, table: string, autoIncrementKey: keyof MyTableModel = null, options: TableContextOptions = {});
 ```
 
-The parameters you pass into your MySqlTableContext are important.
-  - `configOrPool`: This is either a MySql2PoolOptions model object, where you create a pool on the fly, or this is a MySql2Pool, where you pass in an already created pool.
+The parameters you pass into your `MySqlTableContext` are important.
+  - `configOrPool`: This is either a `MySql2PoolOptions` model object, where you create a pool on the fly, or this is a `MySql2Pool`, where you pass in an already created pool.
   - `table`: __IMPORTANT:__ This needs to be the full name of the Table this context represents. If this is named incorrectly, your commands will not work.
   - `autoIncrementKey`: This is optional, but is important if you want insert functions to reassign the insert Ids back to the model object you inserted.
-  - `options`: This is optional, and is rather unimportant, but is used for specifying options like `allowTruncation` and `allowUpdateOnAll`. These two properties are defaulted to false, protecting your Table from accidents involving truncation or updates on all records in your table.
+  - `options`: This is optional, and is rather unimportant, but is used for specifying options like `allowTruncation` and `allowUpdateOnAll`. These two properties are defaulted to false, protecting your Table from accidents involving truncation or updates on all records.
 
 __More documentation on MySqlTableContext can be found [here](https://pkgs.traviszuleger.com/mysql-contexts/MySqlTableContext)__
 
