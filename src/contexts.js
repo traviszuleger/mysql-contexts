@@ -19,7 +19,6 @@ import { createPool } from "mysql2/promise";
 /** @typedef {import('./types').GroupByAliases} GroupByAliases */
 /** @typedef {import('./types').AbstractModel} AbstractModel */
 
-
 /**
  * Object that holds context to a specific Table in your MySQL database. To ensure type-safety in vanilla JavaScript, use JSDOC typing.
  * @template {AbstractModel} TTableModel Model that represents the Table this Context represents.
@@ -44,9 +43,9 @@ export class MySqlTableContext {
     /** @private @readonly @type {'table-context-delete-failed'} Event fired when the Table Context inserts. */
     static EVENT_TABLE_CONTEXT_DELETE_FAILED = 'table-context-delete-failed';
 
+    /** @protected @const @type {keyof TTableModel|null} */ _incKey;
     /** @protected @type {MySql2Pool} */_pool;
     /** @protected @type {string} */ _table;
-    /** @protected @type {keyof TTableModel|null} */ _pKey;
     /** @protected @type {MySql2Connection} */ _cnn;
     /** @protected @type {Promise<MySql2Connection>} */ _cnnPromise;
     /** @protected @type {TableContextOptions} */ _options;
@@ -54,11 +53,11 @@ export class MySqlTableContext {
 
     /**
      * Creates a Connection Pool ready for use inside of multiple MySqlTableContext objects.
-     * @param {MySql2Pool|MySql2PoolOptions} config Configuration to create the pool on.
+     * @param {MySql2PoolOptions} config Configuration to create the pool on.
      * @returns {MySql2Pool} Connection Pool.
      */
     static createPool(config) {
-        return createPool({ ...config, decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20 });
+        return createPool({ decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20, ...config });
     }
 
     /**
@@ -66,16 +65,16 @@ export class MySqlTableContext {
      * which allows this context to work alongside other contexts.
      * @param {MySql2Pool|MySql2PoolOptions} configOrPool MySql2 config options to create a Pool object with or an existing Pool.
      * @param {string} table Name of the Table this context is connecting to.
-     * @param {keyof TTableModel|null} aiKey Primary key of the table that auto increments. If there is none, then leave null.
+     * @param {(keyof TTableModel)?} autoIncrementKey Primary key of the table that auto increments. If there is none, then leave null.
      * @param {TableContextOptions} options Context options that enable certain features.
      */
-    constructor(configOrPool, table, aiKey=null, options = {}) {
+    constructor(configOrPool, table, autoIncrementKey=null, options = {}) {
         this._table = table;
-        this._pKey = aiKey;
+        this._incKey = autoIncrementKey;
         if ('query' in configOrPool) {
             this._pool = configOrPool
         } else {
-            this._pool = createPool({ ...configOrPool, decimalNumbers: true, bigNumberStrings: true, connectionLimit: 20 });
+            this._pool = MySqlTableContext.createPool(configOrPool);
         }
         this._cnnPromise = this._pool.getConnection();
         this._cnnPromise.then(cnn => {
@@ -255,7 +254,7 @@ export class MySqlTableContext {
 
     /**
      * Insert a single TTableModel model object into the Table this context represents. 
-     * @param {Partial<TTableModel>} record A list of TTableModel model objects to insert into the Table.
+     * @param {TTableModel} record A list of TTableModel model objects to insert into the Table.
      * @returns {Promise<TTableModel>} TTableModel model object that was inserted.
      * If an Auto Increment Primary Key was specified, the Insert ID will be updated.
      */
@@ -265,36 +264,43 @@ export class MySqlTableContext {
 
     /**
      * Insert a multiple TTableModel model objects into the Table this context represents. 
-     * If an Auto Increment Primary Key was specified, then the TTableModel passed should not include the Primary Key.
-     * @param {Partial<TTableModel>[]} records A list of TTableModel model objects to insert into the Table.
+     * @param {TTableModel[]} records A list of TTableModel model objects to insert into the Table.
      * @returns {Promise<TTableModel[]>} List of the TTableModel model objects that were inserted. 
      * If an Auto Increment Primary Key was specified, the Insert ID for each object will be updated appropriately.
      */
     async insertMany(records) {
-        if(this._pKey != null) {
+        // This is a semi-complex function, so comments are tagged above most lines of code to help any users interpret the functionality.
+        if (!Array.isArray(records) || records.length <= 0) return [];
+        if(this._incKey != null) {
             records.forEach(r => {
                 // @ts-ignore
-                delete r[this._pKey];
+                delete r[this._incKey];
             })
         }
-        if (!Array.isArray(records) || records.length <= 0) return [];
         /** @type {Partial<TTableModel>[]} */
-        const itemsFiltered = JSON.parse(JSON.stringify(records));
-        itemsFiltered.forEach(i => delete i.Id);
-        const itemsKeysFiltered = Object.keys(itemsFiltered[0]);
-        const cols = itemsKeysFiltered.join(', ');
-        const vals = records.map(i => `(${Object.keys(i).map(key => key != this._pKey ? "?" : "").filter(s => s != "").join(', ')})`).join(', ');
+        // Copy the records.
+        const itemsFiltered = JSON.parse(JSON.stringify(records))
+        // Get the keys, where the most keys exist, from the records. (also remove the column representing the incrementing key, if it exists)
+        const keysFiltered = Object.keys(itemsFiltered.sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]).filter(col => this._incKey != null && col != this._incKey);
+        // Use the keys to create our INTO (...columns) part.
+        const cols = keysFiltered.join(', ');
+        // Create an array of (?[,...?]) strings that represent each record to insert. 
+        const vals = Array.from(Array(records.length).keys()).map(_ => Array.from(Array(keysFiltered.length).keys()).map(_ => '?'));
+        // Create an array of all of the arguments. (any records that do not have the column that was being inserted just has null get inserted EXPLICITLY)
+        const args = keysFiltered.map(k => itemsFiltered.map(rec => k in rec ? rec[k] : null));
+        
         const cmd = `INSERT INTO ${this._table} (${cols}) VALUES ${vals}`;
-        // Map "items" so their Id reflects the database.
-        const insertIds = await this._insert(cmd, itemsFiltered.flatMap(i => Object.values(i)));
-        if(this._pKey != null) {
+        const insertIds = await this._insert(cmd, args);
+
+        if(this._incKey != null) {
+            // Map "items" so their Id reflects the database.
             return records.map((rec,n) => {
                 //@ts-ignore
-                rec[this._pKey] = insertIds[n];
-                return /** @type {TTableModel} */ ( /** @type {unknown} */ (rec));
+                rec[this._incKey] = insertIds[n];
+                return rec;
             });
         }
-        return /** @type {TTableModel[]} */ ( /** @type {unknown} */ (records));
+        return records;
     }
 
     /**
@@ -304,26 +310,19 @@ export class MySqlTableContext {
      * @returns {Promise<number>} Number of affected rows.
      */
     async update(record, where = null) {
-        if (Object.keys(record).length <= 0) throw Error('The record passed has no keys to represent the column(s) to update.');
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
-
-        if (_where.getArgs().length <= 0 && this._pKey == null) {
-            throw Error('No WHERE clause was built, possibly resulting in all records in the table being updated.'
-                + 'If you are sure you know what you are doing, then use the "truncate" function.');
-        }
-
+        if (Object.keys(record).length <= 0) throw Error('The record passed has no keys to represent the column(s) to update.');
         if (where === null) {
-            // @ts-ignore
-            _where.isIn(this._pKey, itemsFiltered.map(i => i.Id));
+            throw Error('No WHERE clause was built, possibly resulting in all records in the table being updated.'
+                + '\n\tIf you are sure you know what you are doing, then use the "updateAll" function.');
         }
-        const sets = Object.keys(record).map(key => key == this._pKey ? "" : `${key}=?`).filter(x => x != "").join(', ');
-        const cmd = `UPDATE ${this._table} SET ${sets}${_where.toString()}`;
 
-        // Delete the Ids so they don't get updated.
-        if(this._pKey != null) {
-            delete record[this._pKey];
-        }
-        const numRowsAffected = this._update(cmd, [...Object.values(record), ..._where.getArgs()]);
+        // Serialize the value sets, removing the AUTO_INCREMENT key if it exists in the record.
+        const sets = Object.keys(record).filter(key => this._incKey != null && key != this._incKey).map(key => `${key}=?`).join(', ');
+        const args = Object.entries(record).filter(([k, _]) => this._incKey != null && k != this._incKey).map(([_,v]) => v);
+
+        const cmd = `UPDATE ${this._table} SET ${sets}${_where.toString()}`;
+        const numRowsAffected = this._update(cmd, [...args, ..._where.getArgs()]);
         return numRowsAffected;
     }
 
@@ -337,15 +336,17 @@ export class MySqlTableContext {
     async updateAll(record) {
         if (Object.keys(record).length <= 0) throw Error('The record passed has no keys to represent the column(s) to update.');
         if(!this._options.allowUpdateOnAll) {
-            throw Error('You are trying to update all records in the table with no filter. '
-                + 'If you are trying to update select records, see "updateMany". '
-                + 'If you know what you are doing, then pass into the "options" parameter in the constructor, "allowUpdateOnAll: true"');
+            throw Error('You are trying to update all records in the table with no filter.'
+                + '\n\tIf you are trying to update select records, see "updateMany".'
+                + '\n\tIf you know what you are doing, then pass into the "options" parameter in the constructor, "allowUpdateOnAll: true"');
         }
-        const items = [record];
-        const itemsFiltered = items.filter(i => Object.keys(i).length > 0);
-        const sets = itemsFiltered.map(i => `${Object.keys(i).map(key => key == this._pKey ? "" : `${key}=?`).filter(x => x != "").join(', ')}`).join(', ');
+
+        // Serialize the value sets, removing the AUTO_INCREMENT key if it exists in the record.
+        const sets = Object.keys(record).filter(key => this._incKey != null && key != this._incKey).map(key => `${key}=?`).join(', ');
+        const args = Object.entries(record).filter(([k, _]) => this._incKey != null && k != this._incKey).map(([_, v]) => v);
+
         const cmd = `UPDATE ${this._table} SET ${sets}`;
-        const numRowsAffected = this._update(cmd, [...itemsFiltered.flatMap(i => Object.values(i))]);
+        const numRowsAffected = this._update(cmd, args);
         return numRowsAffected;
     }
 
@@ -356,9 +357,9 @@ export class MySqlTableContext {
      */
     async delete(where = null) {
         const _where = where != null ? where(new WhereBuilder()) : new WhereBuilder();
-        if (_where.getArgs().length <= 0) {
+        if (where === null) {
             throw Error('No WHERE clause was built, possibly resulting in all records in the table being deleted.'
-                + 'If you are sure you know what you are doing, then use the "truncate" function.');
+                + '\n\tIf you are sure you know what you are doing, then use the "truncate" function.');
         }
         const cmd = `DELETE FROM ${this._table}${_where.toString()}`;
         const ts = await this._delete(cmd, _where.getArgs());
@@ -374,8 +375,8 @@ export class MySqlTableContext {
     async truncate() {
         if (!this._options.allowUpdateOnAll) {
             throw Error('You are trying to delete all records in the table. '
-                + 'If you are trying to delete select records, see "deleteMany". '
-                + 'If you know what you are doing, then pass into the "options" parameter in the constructor, "allowTruncation: true"');
+                + '\n\tIf you are trying to delete select records, see "deleteMany". '
+                + '\n\tIf you know what you are doing, then pass into the "options" parameter in the constructor, "allowTruncation: true"');
         }
         const cmd = `TRUNCATE ${this._table}`;
         const ts = await this._delete(cmd);
@@ -517,6 +518,7 @@ export class MySqlTableContext {
  * @extends {MySqlTableContext<TJoinedModel>}
  */
 export class MySqlJoinContext extends MySqlTableContext {
+    /** @private @type {string} */ joinStatement;
     /** @private @type {string[]} */ columns = [];
     /** @private @type {MySqlTableContext<?>[]} */ tables = [];
 
@@ -556,9 +558,10 @@ export class MySqlJoinContext extends MySqlTableContext {
             if (i == 0) joinPart += leftName;
             joinPart += ` ${left instanceof MySqlJoinContext ? left.joinType : this.joinType} JOIN ${rightName} ON ${leftData.name ?? leftName}.${String(leftJKey)} = ${rightData.name ?? rightName}.${String(rightJKey)}`;
         }
+        this.joinStatement = joinPart;
         this.columns = this.tables.flatMap(t => {
             // @ts-ignore Ignoring as we need access to the tables protected variables that were passed in. (in other languages, this is allowed.)
-            const pKey = String(t._pKey), tName = joinPart;
+            const pKey = String(t._incKey), tName = t._table;
             if (pKey != null && !(t instanceof MySqlJoinContext)) {
                 return [`${tName}.${pKey} AS ${this._augmentField(tName,pKey)}`, `${tName}.*`];
             }
@@ -586,7 +589,7 @@ export class MySqlJoinContext extends MySqlTableContext {
         const _orderBy = orderBy != null ? orderBy(new OrderBuilder()) : new OrderBuilder();
         const _groupBy = groupBy != null ? groupBy(new GroupBuilder()) : new GroupBuilder();
         let cmd = `SELECT ${distinct != null ? `DISTINCT ${distinct.join(',')}` : _groupBy.getSelects() == "*" ? this.columns.join(',') : _groupBy.getSelects()} `
-            + `FROM ${this._table}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `
+            + `FROM ${this.joinStatement}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `
             + `${limit > 0 ? "LIMIT " + limit : ""} `
             + `${offset > 0 ? "OFFSET " + offset : ""}`;
         const ts = await this._query(cmd, _where.getArgs());
@@ -607,7 +610,7 @@ export class MySqlJoinContext extends MySqlTableContext {
         const _orderBy = orderBy != null ? orderBy(new OrderBuilder()) : new OrderBuilder();
         const _groupBy = groupBy != null ? groupBy(new GroupBuilder()) : new GroupBuilder();
         let cmd = `SELECT ${distinct != null ? `DISTINCT ${distinct.join(',')}` : _groupBy.getSelects() == "*" ? this.columns.join(',') : _groupBy.getSelects()} `
-            + `FROM ${this._table}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `;
+            + `FROM ${this.joinStatement}${_where.toString()}${_orderBy.toString()}${_groupBy.toString()} `;
         const ts = await this._query(cmd, _where.getArgs());
         return ts;
     }

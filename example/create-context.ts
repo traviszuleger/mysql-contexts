@@ -18,7 +18,7 @@ function exampleCreateConnectionPoolForManyContexts() {
     const artistCtx = new MySqlTableContext<Artist>(pool, "Customer");
 }
 
-type CustomerWithAutoIncrementId = Customer & { Id: number }; // The aiKey argument has to be a keyof the interface the MySqlTableContext class object is tied to.
+type CustomerWithAutoIncrementId = Customer & { Id?: number };
 
 // Creating a Table Context for chinook.dbo.Customer, specifying that the Table has an Auto Increment column.
 function exampleCreateContextWithIncKey() {
@@ -60,6 +60,31 @@ function exampleWhereNested() {
 function exampleOrderBy() {
     customerCtx.getAll(null, order => order.by("CustomerId"));
 }
+
+// Inserting one Customer.
+function exampleInsertOne() {
+    const customerCtx = new MySqlTableContext<CustomerWithAutoIncrementId>(pool, "Customer", "Id");
+    customerCtx.insertOne({
+        CustomerId: 0,
+        FirstName: '',
+        LastName: '',
+        Email: '',
+    });
+}
+
+// Inserting two Customers.
+function exampleInsertMany() {
+    
+}
+
+function exampleUpdateOne() {
+
+}
+
+function exampleUpdateMany() {
+
+}
+
 
 
 

@@ -8,14 +8,10 @@ mysql-contexts provides a strongly-typed, easy way to interact with your MySQL d
   - [Documentation](#documentation)
   - [Chinook Database Schema](#chinook-database-schema)
   - [Creating Table Contexts](#creating-table-contexts)
-    - [Type defining your Table](#type-defining-your-table-for-chinook)
-      - [Creating your SQL context](#creating-your-sql-context-for-chinook)
-      - [Constructor](#constructor)
-      - [Examples](#examples)
+    - [Typing](#preparing-types-for-mysqltablecontext)
+    - [Constructor Syntax](#syntax-of-mysqltablecontext)
+    - [Examples](#constructing-mysqltablecontext-examples)
   - [Querying](#querying)
-    - [get(limit[, offset, where, orderBy, groupBy, distinct])](#async-getlimit-offset0-wherenull-orderbynull-groupbynull-distinctnull)
-    - [getAll([where, orderBy, groupBy, distinct])](#async-getallwherenull-orderbynull-groupbynull-distinctnull)
-    - [count([where, distinct])](#async-countwherenull-distinctnull)
     - [WHERE clause](#where-clause)
       - [WhereBuilder & WhereBuilderFunction](#wherebuilder-and-wherebuilderfunction)
       - [Negating](#negating)
@@ -45,34 +41,36 @@ This README uses all of its examples using a Chinook database. You can see the c
 
 However, I found the .sql files they provide do not work with MySQL, so in this repository is an "initdb.sql" file you can use to set up your local chinook database.
 
+If you'd like to set up a Docker container to run the Chinook database on localhost:3306, then follow these instructions
+
+1.) Create a Dockerfile  
+```Dockerfile
+FROM mysql:latest
+
+MAINTAINER me
+
+ENV MYSQL_ROOT_PASSWORD=root
+
+ADD initdb.sql /docker-entrypoint-initdb.d
+```
+2.) In the same directory as the Dockerfile, create a new file called "initdb.sql" with the contents from [here](https://raw.githubusercontent.com/traviszuleger/mysql-contexts/main/example/initdb.sql)  
+3.) From the command line, in the same directory as your Dockerfile and "initdb.sql", run the following instructions  
+```
+sudo docker build --tag chinook_example_image .
+sudo docker run -d -p 3306:3306 --name chinook-example-db chinook_example_image:latest
+```
+
 # Creating Table Contexts
 
 As mysql-contexts implies, the core of this library allows you to create a MySQL Table Context for usage of interacting with that Table in MySQL. This library is most powerful when you use it with TypeScript or JSDOC typing. Although, the typing in mysql-contexts is done in JSDOC typing, this tutorial will be using TypeScript for readability sake.
 
-## Type defining your Table for chinook
+## Preparing Types for MySqlTableContext
 
-Since this acts as an interface, your types should perfectly resemble your Table as it appears in your database. The below example is how the Customer record interface should look that will act as the primary model object connected to the Customer table in our chinook database.
+Since this acts as an interface, your types should perfectly resemble your Table as it appears in your database. 
 
-```
-// Table schema in chinook db.
-// CREATE TABLE Customer
-// (
-//     CustomerId INT NOT NULL,
-//     FirstName VARCHAR(40) NOT NULL,
-//     LastName VARCHAR(20) NOT NULL,
-//     Company VARCHAR(80),
-//     Address VARCHAR(70),
-//     City VARCHAR(40),
-//     State VARCHAR(40),
-//     Country VARCHAR(40),
-//     PostalCode VARCHAR(10),
-//     Phone VARCHAR(24),
-//     Fax VARCHAR(24),
-//     Email VARCHAR(60) NOT NULL,
-//     SupportRepId INT,
-//     CONSTRAINT PK_Customer PRIMARY KEY  (CustomerId)
-// );
+The below example is how an interface should look that represents the Customer table in our chinook database.
 
+```ts
 interface Customer {
     CustomerId: number;
     FirstName: string;
@@ -90,30 +88,65 @@ interface Customer {
 };
 ```
 
-As you can see, nullable types, as defined in the database, have "?" appended after their property key in the interface. This isn't important, but can definitely stump you later on if you don't define it correctly.
+How the Table is defined in chinook:  
 
-## Creating your SQL context for chinook
-
-In the last section, we created an interface for our Chinook database table, "Customer". Now we will create a Table Context to provide an interface to our Table.
-
-### Constructor
-
-First, you need to know how the MySqlTableContext can be constructed.
-
-### Examples
-
+```sql
+CREATE TABLE Customer
+(
+    CustomerId INT NOT NULL,
+    FirstName VARCHAR(40) NOT NULL,
+    LastName VARCHAR(20) NOT NULL,
+    Company VARCHAR(80),
+    Address VARCHAR(70),
+    City VARCHAR(40),
+    State VARCHAR(40),
+    Country VARCHAR(40),
+    PostalCode VARCHAR(10),
+    Phone VARCHAR(24),
+    Fax VARCHAR(24),
+    Email VARCHAR(60) NOT NULL,
+    SupportRepId INT,
+    CONSTRAINT PK_Customer PRIMARY KEY  (CustomerId)
+);
 ```
+
+As you can see, nullable types, as defined in the database, have "?" appended after their property key in the interface. If you improperly define your table model, this may stump you later on.
+
+__Note: Primary keys should be annotated as a non-nullable, but if the key is an AUTO_INCREMENT invariant, then you can specify it as nullable. This will help you later when you insert records into the database. (see [Inserting](#inserting) for more details)__
+
+## Syntax of MySqlTableContext
+
+MySqlTableContext is its own class but also has a MySqlJoinContext extension. The MySqlJoinContext is involved with joining tables together-- You can read more about that (here)[#joing-tables]
+
+The constructor for a MySqlTableContext is defined as:
+
+```ts
+MySqlTableContext<MyTableModel>(configOrPool: MySql2PoolOptions|MySql2Pool, table: string, autoIncrementKey: keyof MyTableModel = null, options: TableContextOptions = {});
+```
+
+The parameters you pass into your MySqlTableContext are important.
+  - `configOrPool`: This is either a MySql2PoolOptions model object, where you create a pool on the fly, or this is a MySql2Pool, where you pass in an already created pool.
+  - `table`: __IMPORTANT:__ This needs to be the full name of the Table this context represents. If this is named incorrectly, your commands will not work.
+  - `autoIncrementKey`: This is optional, but is important if you want insert functions to reassign the insert Ids back to the model object you inserted.
+  - `options`: This is optional, and is rather unimportant, but is used for specifying options like `allowTruncation` and `allowUpdateOnAll`. These two properties are defaulted to false, protecting your Table from accidents involving truncation or updates on all records in your table.
+
+__More documentation on MySqlTableContext can be found [here](https://pkgs.traviszuleger.com/mysql-contexts/MySqlTableContext)__
+
+## Constructing MySqlTableContext Examples
+
+Here are some examples of constructing a MySqlTableContext using the chinook database.
+
+```ts
 import MySqlTableContext from '@tzuleger/mysql-contexts';
 import type { Customer } from "./chinook-types";
 
-// Port is defaulted to 3306.
+// Port is defaulted to 3306, but in our setup we defined port to be 10500.
 const customerCtx = new MySqlTableContext<Customer>({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" }, "Customer");
 ```
 
-In the event you want to connect to two separate tables without creating a new Connection every time, you can call the static function on MySqlTableContext, "createPool", to which you can pass as an argument in place of the PoolOptions like above.
+In the event you want to connect to two separate tables without creating a new Connection every time, you can call the static function on MySqlTableContext, "createPool", to which you can pass as an argument in place of the PoolOptions like above.  
 
-e.g.,  
-```
+```ts
 import MySqlTableContext from '@tzuleger/mysql-contexts';
 import type { Customer, Artist } from "./chinook-types";
 
@@ -123,9 +156,9 @@ const customerCtx = new MySqlTableContext<Customer>(pool, "Customer");
 const artistCtx = new MySqlTableContext<Artist>(pool, "Artist");
 ```
 
-Now, pretend for a moment our Customer has an auto increment column attached to it, called "Id". With that being the case, you should pass in another argument specifying what the column name is.  
-e.g.,  
-```
+Given your represented Table has a key defined as an AUTO_INCREMENT key, then you would need to do the following.
+
+```ts
 import MySqlTableContext from '@tzuleger/mysql-contexts';
 import type { Customer } from "./chinook-types";
 
@@ -136,223 +169,39 @@ const pool = MySqlTableContext.$createPool({ host: "127.0.0.1", port: 10500, dat
 const customerCtx = new MySqlTableContext<Customer>(pool, "Customer", "Id");
 ```
 
-Congratulations, you just set up a Table Context to interface to chinook.dbo.Customer. You can alter this code however you like to attach to many different tables.
-
 # Querying
 
-We were able to create our MySqlTableContext, now we want to query from it. Querying from your context may be a little strange at first. The main two functions for querying is "get" and "getAll".
+Querying is simple and only involves calling some pre-defined functions. These functions are `.get()`, `.getAll()`, and `.count()`.  
 
-## async get(limit, offset=0, where=null, orderBy=null, groupBy=null, distinct=null);
-
-The "get" function is for grabbing an arbitrary amount of records, specified by the {limit} argument. You can add in more arguments to further cleanse your query.  
-Here is a list of all of the arguments and their descriptions.
- - limit: Number of records to grab.
- - offset: Number specified to offset from the beginning.
- - where: Builder function to help build a WHERE clause.
- - orderBy: Builder function to help build an ORDER BY clause.
- - groupBy: Builder function to help build a GROUP BY clause.
- - distinct: List of column names under this TableContext to select distinctively off of.
-
-Now, here's an example of a simple Query to grab the first 5 Customer records from chinook.dbo.Customer.
-
-```
-// ... initialization
-
-// Since this is a promise, you can "await" on this function where it will yield the results.
-customerCtx.get(5, 0).then(results => {
-     console.log(results);
-});
-
-```
-
-The above output will show:
-
-```
-[
-  {
-    CustomerId: 1,
-    FirstName: 'LuÃ­s',
-    LastName: 'GonÃ§alves',
-    Company: 'Embraer - Empresa Brasileira de AeronÃ¡utica S.A.',
-    Address: 'Av. Brigadeiro Faria Lima, 2170',
-    City: 'SÃ£o JosÃ© dos Campos',
-    State: 'SP',
-    Country: 'Brazil',
-    PostalCode: '12227-000',
-    Phone: '+55 (12) 3923-5555',
-    Fax: '+55 (12) 3923-5566',
-    Email: 'luisg@embraer.com.br',
-    SupportRepId: 3
-  },
-  {
-    CustomerId: 2,
-    FirstName: 'Leonie',
-    LastName: 'KÃ¶hler',
-    Company: null,
-    Address: 'Theodor-Heuss-StraÃŸe 34',
-    City: 'Stuttgart',
-    State: null,
-    Country: 'Germany',
-    PostalCode: '70174',
-    Phone: '+49 0711 2842222',
-    Fax: null,
-    Email: 'leonekohler@surfeu.de',
-    SupportRepId: 5
-  },
-  {
-    CustomerId: 3,
-    FirstName: 'FranÃ§ois',
-    LastName: 'Tremblay',
-    Company: null,
-    Address: '1498 rue BÃ©langer',
-    City: 'MontrÃ©al',
-    State: 'QC',
-    Country: 'Canada',
-    PostalCode: 'H2G 1A7',
-    Phone: '+1 (514) 721-4711',
-    Fax: null,
-    Email: 'ftremblay@gmail.com',
-    SupportRepId: 3
-  },
-  {
-    CustomerId: 4,
-    FirstName: 'BjÃ¸rn',
-    LastName: 'Hansen',
-    Company: null,
-    Address: 'UllevÃ¥lsveien 14',
-    City: 'Oslo',
-    State: null,
-    Country: 'Norway',
-    PostalCode: '0171',
-    Phone: '+47 22 44 22 22',
-    Fax: null,
-    Email: 'bjorn.hansen@yahoo.no',
-    SupportRepId: 4
-  },
-  {
-    CustomerId: 5,
-    FirstName: 'FrantiÂšek',
-    LastName: 'WichterlovÃ¡',
-    Company: 'JetBrains s.r.o.',
-    Address: 'Klanova 9/506',
-    City: 'Prague',
-    State: null,
-    Country: 'Czech Republic',
-    PostalCode: '14700',
-    Phone: '+420 2 4172 5555',
-    Fax: '+420 2 4172 5555',
-    Email: 'frantisekw@jetbrains.com',
-    SupportRepId: 4
-  }
-]
-```
-
-You can see more information on clauses starting in the [WHERE clause](#where-clause) section.
-
-## async getAll(where=null, orderBy=null, groupBy=null, distinct=null);
-
-The "getAll" function is for grabbing all records from the table. You can add in certain arguments to further cleanse your query.  
-Here is a list of all of the arguments and their descriptions.
- - limit: Number of records to grab.
- - offset: Number specified to offset from the beginning.
- - where: Builder function to help build a WHERE clause.
- - orderBy: Builder function to help build an ORDER BY clause.
- - groupBy: Builder function to help build a GROUP BY clause.
- - distinct: List of column names under this TableContext to select distinctively off of.
- 
-Now, here's an example of a simple Query to grab the all Customer records from chinook.dbo.Customer
-
-```
-// ... initialization
-
-// 
-customerCtx.getAll();
-// builds the Query: SELECT * AS count FROM Customer;
-
-```
-
-## async count(where=null, distinct=null)
-
-The "count" function is for grabbing the number of records in the database. You can add certain arguments to further limit the number of records you are querying for.  
-Here is a list of all of the arguments and their descriptions.
- - where: Builder function to help build a WHERE clause.
- - distinct: List of column names under this TableContext to select distinctively off of.
-
-Now, here are some examples:
-
-```
-// -- get the total number of customers --
-customerCtx.count();
-// builds the Query: SELECT COUNT(*) AS count FROM Customer;
-
-// -- get the number of customers with the first name, "Frank" --
-customerCtx.count(where => where.equals("FirstName", "Frank"));
-// builds the Query: SELECT COUNT(*) AS count FROM Customer WHERE FirstName='Frank';
-
-// -- get the number of unique countries where customers reside in --
-customerCtx.count(null, ["Country"]);
-// builds the Query: SELECT COUNT(DISTINCT Country) AS count FROM Customer;
-```
+  - `.get(limit[, offset=0, where=null])`: Retrieves the first \{limit\} records offset by `offset`, given the conditions built by `where` __If nothing is passed into `order` and/or `where`, then nothing is built from those respective functions__
+  - `.getAll([where=null, orderBy=null, groupBy=null, distinct=[]])`: Retrieves all records (by `distinct` keys, or no distinction if not passed), which can be filtered on `where`, ordered by `orderBy`, grouped by `groupBy`. __If nothing is passed into these parameters, then nothing is built from those respective functions__
+  - `.count([where=null])`: Retrieves the total number of records, which can be filtered on `where`. __If nothing is passed, then no clause is built__
 
 ## WHERE clause
 
-Running queries is one thing, but the data you get back is pointless unless you can filter on them. You could use the "getAll" function and then use JavaScript's built in [filter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter) function, but that could be pulling in a LOT of data into memory.
+__You can see the full documentation on `WhereBuilder<TTableModel>` [here](https://pkgs.traviszuleger.com/mysql-contexts/WhereBuilder)__  
 
-#### WhereBuilder and WhereBuilderFunction
+Running queries is one thing, but the data you get back is pointless unless you can filter on them. On tables with a small amount of records, you can use the `.getAll()` function, and then use JavaScript's built in [filter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter) function, but tables with large amounts of records could consume a lot of memory.
 
-With every single get or getAll function you call, you have an optional anonymous WhereBuilderFunction function type argument called "where" that allows you to create a WHERE clause. The WhereBuilderFunction provides you a WhereBuilder&lt;TTableModel&gt; context that provides you access to simple SQL conditional-like syntax functions to build your clause. The TTableModel represents the model object your MySqlTableContext class is linked to.
+That is where the `where` function parameters come in. These parameters are used to help create a WHERE clause tailored for your benefit. 
 
-Here is an example of how the WhereBuilderFunction&lt;TTableModel&gt; class is used.
+### WhereBuilder and WhereBuilderFunction
 
-```
+The where function parameter, as previously mentioned, is of type `WhereBuilderFunction<TTableModel>`. The `WhereBuilderFunction<TTableModel>` type is a custom callback function that takes in a `WhereBuilder<TTableModel>` class object that is used to build your WHERE clause. This subsection explains the basic syntax of these two types and how they are used to build your clause.
+
+Here is how the `WhereBuilderFunction<TTableModel>` class is typed.
+
+```ts
 // The generic parameter, TTableModel, is defined here as the model object you used to create your MySqlTableContext. 
 // Using our above examples with our Customer table context, TTableModel would be "Customer". 
 type WhereBuilderFunction<TTableModel> = (where: WhereBuilder<TTableModel>) => WhereBuilder<TTableModel>;
 ```
-
-Below is a table of key functions that the WhereBuilder class has with descriptions of what they do.
-
-__NOTE: All functions returns a reference to itself, to support function chaining.__
-
-| Function | Arguments | Respective argument types | Description |
-| -------- | ----------------- | --------------- | ----------- |
-| not | where | WhereBuilderFunction&lt;TTableModel&gt; | Sets a flag so the next condition added is negated. If you want to negate your entire condition, you can nest another WhereBuilder using the WhereBuilderFunction, where. |
-| equals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is equal to the value specified. If a condition already exists, then " AND {colName} = {val}" is appended instead. |
-| notEquals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not equal to the value specified. If a condition already exists, then " AND {colName} &lt;&gt; {val}" is appended instead. |
-| lessThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than the value specified. If a condition already exists, then " AND {colName} &lt; {val}" is appended instead. |
-| lessThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than or equal to the value specified. If a condition already exists, then " AND {colName} &lt;= {val}" is appended instead. |
-| greaterThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than the value specified. If a condition already exists, then " AND {colName} &gt; {val}" is appended instead. |
-| greaterThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than or equal to the value specified. If a condition already exists, then " AND {colName} &gt;= {val}" is appended instead. |
-| isIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is one of the values specified. If a condition already exists, then " AND {colName} IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| isNotIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not one of the values specified. If a condition already exists, then " AND {colName} NOT IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| isNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NULL. If a condition already exists, then " AND {colName} = NULL" is appended instead. |
-| isNotNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NOT NULL. If a condition already exists, then " AND {colName} &lt;&gt; NULL" is appended instead. |
-| andEquals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is equal to the value specified. If a condition already exists, then " WHERE {colName} = {val}" is appended instead. |
-| andNotEquals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not equal to the value specified. If a condition already exists, then " WHERE {colName} &lt;&gt; {val}" is appended instead. |
-| andLessThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than the value specified. If a condition already exists, then " WHERE {colName} &lt; {val}" is appended instead. |
-| andLessThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than or equal to the value specified. If a condition already exists, then " WHERE {colName} &lt;= {val}" is appended instead. |
-| andGreaterThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than the value specified. If a condition already exists, then " WHERE {colName} &gt; {val}" is appended instead. |
-| andGreaterThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than or equal to the value specified. If a condition already exists, then " WHERE {colName} &gt;= {val}" is appended instead. |
-| andIsIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is one of the values specified. If a condition already exists, then " WHERE {colName} IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| andIsNotIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not one of the values specified. If a condition already exists, then " WHERE {colName} NOT IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| andIsNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NULL. If a condition already exists, then " WHERE {colName} = NULL" is appended instead. |
-| andIsNotNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NOT NULL. If a condition already exists, then " WHERE {colName} &lt;&gt; NULL" is appended instead. |
-| orEquals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is equal to the value specified. If a condition already exists, then " WHERE {colName} = {val}" is appended instead. |
-| orNotEquals | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not equal to the value specified. If a condition already exists, then " WHERE {colName} &lt;&gt; {val}" is appended instead. |
-| orLessThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than the value specified. If a condition already exists, then " WHERE {colName} &lt; {val}" is appended instead. |
-| orLessThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is less than or equal to the value specified. If a condition already exists, then " WHERE {colName} &lt;= {val}" is appended instead. |
-| orGreaterThan | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than the value specified. If a condition already exists, then " WHERE {colName} &gt; {val}" is appended instead. |
-| orGreaterThanOrEqualTo | column, value, where | keyof TTableModel, TTableModel[TColumn], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is greater than or equal to the value specified. If a condition already exists, then " WHERE {colName} &gt;= {val}" is appended instead. |
-| orIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is one of the values specified. If a condition already exists, then " WHERE {colName} IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| orIsNotIn | column, value, where | keyof TTableModel, TTableModel[TColumn][], WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is not one of the values specified. If a condition already exists, then " WHERE {colName} NOT IN ({vals[0]}[,...{vals[n]}])" is appended instead. |
-| orIsNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NULL. If a condition already exists, then " WHERE {colName} = NULL" is appended instead. |
-| orIsNotNull | column, where | keyof TTableModel, WhereBuilderFunction&lt;TTableModel&gt; | Adds a condition to a statement that checks if the column name specified is NOT NULL. If a condition already exists, then " WHERE {colName} &lt;&gt; NULL" is appended instead. |
-
-When using the WhereBuilderFunction anonymous function, you can simply tag on your conditions one after each other.  
+ 
+The `WhereBuilder<TTableModel>` class functions return references back to its class, making it so you can chain your expressions.  
 
 Here is an example of how you build a WHERE clause:
 
-```
+```ts
 // ... initialization
 
 //  -- get all Customers named "Frank Harris" --
@@ -360,125 +209,229 @@ customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastNa
 // builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND LastName='Harris';
 ```
 
-#### Negating
+The above example builds the following command (not formatted to actual command that is sent):
 
-Although, most functions are provided with their own negated variant, sometimes you may know what you don't want, but instead you build it for what you actually want, and just want to negate it. Negating is simple and provides just that with that the "not()" function.  
-
-Here is an example of negating one condition in your entire clause.
-
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE FirstName='Frank' 
+        AND LastName='Harris';
 ```
+
+### Negating
+
+Although, most functions are provided with their own negated variant, sometimes you may have already built a condition, but quickly decided you want to negate that expression. The `.not()` function allows you to negate the immediate next boolean expression chained to the respective `WhereBuilder<TTableModel>` class object.
+
+Here is an example of negating the next chained condition.
+
+```ts
 // ... initialization
 
 //  -- get all Customers with the first name, "Frank", and not the last name "Harris" --
 customerCtx.getAll(where => where.equals("FirstName", "Frank").not().andEquals("LastName", "Harris"));
-// builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND NOT LastName='Harris';
 ```
-__NOTE: instead of chaining .not() with .andEquals(...), you could just use .andNotEquals(...), but for the sake of this example, the chaining method is used.__
 
-If a situation comes up where you decide you don't want that entire condition, but instead want the exact opposite of what you built, you can simply move your entire anonymous function into the .not() function.  
+__NOTE: As mentioned above, you could use `.andNotEquals()` instead of chaining `.not()` with `.andEquals()`.__  
+The above example builds the following command (not formatted to actual command that is sent):
 
-e.g.,
-
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE FirstName='Frank' 
+        AND NOT LastName='Harris';
 ```
+
+The above example only negates the next chained condition. In the case you may want to negate an entire condition, you can simply move your chains into the `.not()` function.
+
+Here is an example of negating an entire chained condition.
+
+```ts
 // ... initialization
 
 //  -- get all Customers that do not have the full name "Frank Harris". --
 customerCtx.getAll(where => where.not(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris")));
-// builds the Query: SELECT * FROM Customer WHERE NOT (FirstName='Frank' AND LastName='Harris');
 ```
 
-#### Nested Conditionals for WHERE
+The above example builds the following command (not formatted to actual command that is sent):
 
-Every condition on this WhereBuilder class object chains its conditions. This can be problematic in the situation where you may need to consider a sort of precedence on your conditions. (e.g., Get all Customers named "Frank Harris" or with CustomerId of 16) You can solve these precedence issues with Nested conditionals.
-
-Every conditional function (besides the "not" function) has an optional parameter which is another WhereBuilderFunction. This function is meant for nesting your conditionals.
-
-Here is an example of using nested conditionals:  
-
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE 
+        NOT (FirstName='Frank' 
+            AND LastName='Harris');
 ```
+
+### Nested Conditionals
+
+Every function on the `WhereBuilder<TTableModel>` class object is chained, making its conditions appear in a precedence order of left to right. This can be problematic in the situation where you may need to consider a different precedence on your conditions. You can solve these precedence issues with nested conditionals.  
+
+Every conditional function has an optional parameter which is another `WhereBuilderFunction<TTableModel>`. This callback function is meant for nesting your conditionals. If this callback is specified, then the resulting conditional from the __nested__ builder is appended to the resulting conditional of the __original__ builder with the callback, __THEN__ that entire condition is wrapped with parentheses.
+
+Here is an example of using nested conditionals:
+
+```ts
 // ... initialization
 
 //  -- get all Customers with the a full name of "Frank Harris" OR all Customers with the first name of "Frank" and a CustomerId of 16 --
 customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris", where => where.orEquals("CustomerId", 16)));
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE FirstName='Frank' 
+        AND (LastName='Harris' 
+            OR CustomerId=16);
+```
+
+```ts
+// -- get all Customers who reside in the USA with a full name of "Frank Harris" OR all Customers who reside in the USA with just a first name of "Frank" and the CustomerId of 16. --
+customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris", where => where.orEquals("CustomerId", 16)).andEquals("Country", "USA"));
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM Customer 
+    WHERE FirstName='Frank' 
+        AND (LastName='Harris' 
+            OR CustomerId=16) 
+        AND Country='USA';
+```
+
+While nested conditionals can get messy, they may be useful in certain situations. If the chaining becomes too problematic, you can always pre-define your functions and pass them in by name.
+
+Here is an example of pre-defining your functions:
+
+```ts
+// ... initialization
+
+import { type WhereBuilderFunction } from '@tzuleger/mysql-contexts/types';
+
+const where: WhereBuilderFunction<Customer> = function(where: WhereBuilder<Customer>) {
+    where.equals("FirstName", "Frank");
+    where.equals("LastName", "Harris", where => where.orEquals("CustomerId", 16));
+    return where;
+}
+
+//  -- get all Customers with the a full name of "Frank Harris" OR all Customers with the first name of "Frank" and a CustomerId of 16 --
+customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris", whereCustomerIdIs16));
 // builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND (LastName='Harris' OR CustomerId=16);
 
 // -- get all Customers who reside in the USA with a full name of "Frank Harris" OR all Customers who reside in the USA with just a first name of "Frank" and the CustomerId of 16. --
-customerCtx.getAll(where => where.equals("FirstName", "Frank").andEquals("LastName", "Harris", where => where.orEquals("CustomerId", 16)).andEquals("Country", "USA"));
+customerCtx.getAll(where);
 // builds the Query: SELECT * FROM Customer WHERE FirstName='Frank' AND (LastName='Harris' OR CustomerId=16) AND Country='USA';
 ```
 
-While nested conditionals can get messy, they may be useful in certain situations.
-
 ## ORDER BY clause
 
-Building your ORDER BY clause doesn't get as complex as your WHERE clause, but like all clauses in mysql-contexts, clauses will appear very similarly.  
+__You can see the full documentation on `OrderByBuilder<TTableModel>` [here](https://pkgs.traviszuleger.com/mysql-contexts/OrderByBuilder)__  
 
-Just like the WhereBuilderFunction, the orderBy (in the .get() and .getAll() functions) has its own OrderByBuilderFunction.  
-Here is an example of how the OrderByBuilderFunction&lt;TTableModel&gt; class is used.
+Building an ORDER BY clause may not get as complex as the WHERE clause, but like such, it involves chaining SQL-like syntax functions to help build your clause. These functions are `.by()`, `.asc()`, and `.desc()`.  
 
-```
+  - `.by(column)`: Sets the `column` to sort by (defaults to ascending order)
+  - `.asc()`: Can only be chained following a `.by()` call and sets the sort order for `.by()`'s `column` to ascending. 
+  - `.desc()`: Can only be chained following a `.by()` call and sets the sort order for `.by()`'s `column` to descending.
+
+Just like the `WhereBuilderFunction<TTableModel>` type, the `orderBy` parameter (in the `.get()` and `.getAll()` functions) has its own `OrderByBuilderFunction<TTableModel>`.  
+
+Here is how the `OrderByBuilderFunction<TTableModel>` class is typed.
+
+```ts
 // The generic parameter, TTableModel, is defined here as the model object you used to create your MySqlTableContext. 
 // Using our above examples with our Customer table context, TTableModel would be "Customer". 
 type OrderByBuilderFunction<TTableModel> = (where: OrderByBuilder<TTableModel>) => OrderByBuilder<TTableModel>;
 ```
 
-Below is a table of key functions that the OrderBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
+The main difference with `WhereBuilder<TTablelModel>` and `OrderByBuilder<TTableModel>` is the latter uses a type of function chaining where the `.by()` function can be chained recursively, while `.asc()` and `.desc()` can only be chained following a `.by()` call.
 
-| Function | Arguments | Respective argument types | Description |
-| -------- | ----------------- | --------------- | ----------- |
-| by | tKey | keyof TTableModel | Returns a model object with three functions, .by(tKey) (reference back to this function), .asc(), and .desc() |
-| by.by() | tKey | keyof TTableModel | See the by() function description |
-| by.asc() | None | None | Sort your results in ascending order (this only applies to the sorting of tKey from your last call to .by(tKey)) |
-| by.desc() | None | None | Sort your results in descending order (this only applies to the sorting of tKey from your last call to .by(tKey)) |
-
-The .by() function's reference back to itself can get a little confusing, but it makes it so if you want to sort multiple keys in ascending order, you can just chain the .by() function to itself.
+The `.by()` function's chain back to itself can get a little confusing, but it makes it so if you want to sort multiple keys in ascending order, you can just chain the .by() recursively without adding the pain of chaining `.asc()` every time.
 
 Here is an example of how you would build an ORDER BY clause:
 
-```
+```ts
 // ... initialization
 
 // -- get all Customers ascending ordered by their CustomerId. --
 customerCtx.getAll(null, order => order.by("CustomerId"));
-// builds the Query: SELECT * FROM Customer ORDER BY CustomerId;
+```
 
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM Customer 
+    ORDER BY CustomerId;
+```
+
+Here is an example of how you would build an ORDER BY clause chaining with multiple keys to sort by:
+
+```ts
 // -- query to get all Customers descending ordered by their SupportRepId then ascending ordered by their CustomerId. --
-customerCtx.getAll(null, order => order.by("CustomerId").desc().by("CustomerId"));
+customerCtx.getAll(null, order => order.by("SupportRepId").desc().by("CustomerId"));
 // builds the Query: SELECT * FROM Customer ORDER BY SupportRepId DESC, CustomerId;
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM Customer 
+    ORDER BY SupportRepId DESC, 
+        CustomerId;
 ```
 
 ## GROUP BY clause
 
+__You can see the full documentation on `GroupByBuilder<TTableModel>` [here](https://pkgs.traviszuleger.com/mysql-contexts/GroupByBuilder)__  
 __NOTE: The GROUP BY clause is not optimized nor tested thoroughly, so this may have bugs.__
 
-Just like the other clauses, to build your GROUP BY clause, you need to provide an anonymous function. Building your GROUP BY clause is similar to the ORDER BY clause building, but are chained immediately. Additionally, there are 4 extra functions that provide easier interfacing for Dates.
+Just like the other clauses, building your GROUP BY clause involves chaining SQL-like syntax functions to help build your clause. In this case, there is only one function that you need to worry about, and that is the `.by()` function. As a quality of life feature, there are 4 more pre-defined functions that provide easier interfacing for SQL DATE/DATETIME/TIMESTAMP types. These functions are `.byDay()`, `.byWeek()`, `.byMonth()`, and `.byYear()`.
 
-It is important to know, if you use a GROUP BY clause, you can only grab the columns that are in your GROUP BY clause.
+  - `.by(column)`: Groups the results together where the values specified by `column` are equal. If this is specified, then the `$count` properties from records returned from `.get()` and `.getAll()` functions become available. 
+  - `.byDay(column)`: Groups the results together where the values specified by `column` are equal. The key to group on becomes `CONCAT(YEAR(column), '/', DAY(column))`. If this is specified, then the `$count` and `$yearDay` properties from records returned from `.get()` and `.getAll()` functions become available. 
+  - `.byWeek(column)`: Groups the results together where the values specified by `column` are equal. The key to group on becomes `CONCAT(YEAR(column), '/', WEEK(column))`. If this is specified, then the `$count` and `$yearWeek` properties from records returned from `.get()` and `.getAll()` functions become available.
+  - `.byMonth(column)`: Groups the results together where the values specified by `column` are equal. The key to group on becomes `CONCAT(YEAR(column), '/', MONTH(column))`. If this is specified, then the `$count` and `$yearMonth` properties from records returned from `.get()` and `.getAll()` functions become available. 
+  - `.byYear(column)`: Groups the results together where the values specified by `column` are equal. The key to group on becomes `YEAR(column)`. If this is specified, then the `$count` and `$year` properties from records returned from `.get()` and `.getAll()` functions become available. 
 
-Below is a table of key functions that the GroupByBuilder&lt;TTableModel&gt; class has with descriptions of what they do.  
-
-| Function | Arguments | Respective argument types | Description |
-| -------- | ----------------- | --------------- | ----------- |
-| by | tKey | keyof TTableModel | Group your results by the given key. |
-| byDay | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by day. If this is specified, then the results you get back will have a "yearDay" property containing the date. |
-| byWeek | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by week. If this is specified, then the results you get back will have a "yearWeek" property containing the date. |
-| byMonth | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by month. If this is specified, then the results you get back will have a "yearMonth" property containing the date. |
-| byYear | tKey | keyof TTableModel | Group your results by a DATE/DATETIME/TIMESTAMP column by year. If this is specified, then the results you get back will have a "yearYear" property containing the date. |
-
-__Using any of these functions gives you context to the "count" property in any of your return results__
+__IMPORTANT: If you use a GROUP BY clause, you can only grab the columns that are in your GROUP BY clause.__
 
 Here is an example of how you would build an ORDER BY clause:
 
-```
+```ts
 // ... initialization
 
 // -- get the number of Employees grouped by country. --
 customerCtx.getAll(null, null, group => group.by("Country"));
-// builds the Query: SELECT COUNT(*) as count, Country FROM Customer GROUP BY Country;
+```
 
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT COUNT(*) as count
+    ,Country
+    FROM Employee 
+    GROUP BY Country
+```
+
+```ts
 // -- get the number of Employees grouped by country and by the year of their hire date. --
 employeeCtx.getAll(null, null, group => group.by("Country").byYear("HireDate"));
-// builds the Query: SELECT COUNT(*) as count, Country, YEAR(HireDate) as year FROM Employee GROUP BY Country, YEAR(HireDate);
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT COUNT(*) as count
+    ,Country
+    ,YEAR(HireDate) as $year
+    FROM Employee 
+    GROUP BY Country, 
+        YEAR(HireDate);
 ```
 
 ## DISTINCT clause
@@ -488,21 +441,127 @@ Although, the DISTINCT keyword isn't necessarily a clause itself, it is describe
 Building your DISTINCT clause isn't built from an anonymous function, like the other clauses. Instead, it is built just by providing the columns you want to be unique.  
 Here's an example of how you would build a DISTINCT clause:
 
-```
+```ts
 // ... initialization
 
 // -- get all countries that Customers reside in  --
 customerCtx.getAll(null, null, null, ["Country"]);
-// builds the Query: SELECT DISTINCT Country FROM Customer;
+```
 
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT DISTINCT Country 
+    FROM Customer;
+```
+
+```ts
 // -- get all countries and cities that Customers reside in  --
 customerCtx.getAll(null, null, null, ["Country", "City"]);
 // builds the Query: SELECT DISTINCT Country FROM Customer;
 ```
 
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+SELECT DISTINCT Country
+    ,City 
+    FROM Customer;
+```
+
+__NOTE: If distinct columns are returned, then those are the only columns that will have non-null values on successful queries. However, as of v1.0, this does not constrain the return type to only those values, so all other values may appear to have their properties, when in reality, they will not.__
+
 # Inserting
 
-With knowing how to query from our database using our context, we also need to know how to insert into our database. The two main functions for inserting are "insert" and "insertMany".
+__Note: Insert functions are only available to single table contexts. Attempting to insert on a joined context results in an Error.__
+
+Inserting into our table is not as nearly as complex as any other class function. Inserting is handled with two class functions. These functions are `.insertOne()` and `.insertMany()`.
+
+  - `.insertOne(record)`: Inserts one record into the table and returns the record inserted. If `autoIncrementKey` was specified in the constructor, then the returned record will have the new Id assigned to it.
+  - `.insertMany(records)`: Inserts many records into the table and returns an array of the records inserted. If `autoIncrementKey` was specified in the constructor, then the returned records will all have their new Id assigned to them.
+
+__Important: If your table has an AUTO_INCREMENT column, and the record you're trying to insert has the key to that column, then that key will be deleted before it is inserted. Since it will be automatically assigned after getting inserted. Since this is the case, the one exception when typing your object models is making your primary key nullable IF AND ONLY IF that key is an AUTO_INCREMENT column. Otherwise, you CAN pass some unimportant data into that property (like 0), and the insert functions will handle it.__
+
+Here is an example of inserting one record:
+
+```ts
+// ... initialization
+
+const nextId = customerCtx.count() + 1;
+const customer = customerCtx.insertOne({
+    CustomerId: nextId, // required, as defined in our Customer interface. If this property were removed, then this would NOT be type-valid
+    FirstName: 'John', // required
+    LastName: 'Doe', // required
+    Email: 'johndoe@example.com', // required
+    Phone: '111-222-3333' // nullable, as defined in our Customer interface. Since this is optional, this property could be removed and this would still be type-valid. 
+});
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+INSERT INTO Customer 
+    (CustomerId, FirstName, LastName, Email, Phone) 
+    VALUES 
+    ({nextId}, 'John', 'Doe', 'johndoe@example.com', '111-222-3333');
+```
+
+Here is an example of inserting one record, where the Table has an AUTO_INCREMENT key.
+
+```ts
+// Notice how I set Id: number to an nullable property.
+type CustomerWithAutoIncrementId = Customer & { Id?: number };
+const pool = MySqlTableContext.createPool({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" });
+const customerCtx = new MySqlTableContext<CustomerWithAutoIncrementId>(pool, "Customer", "Id");
+
+const customer = customerCtx.insertOne({
+    CustomerId: 99999999, // required, as defined in our Customer interface. If this property were removed, then this would NOT be type-valid
+    FirstName: 'John', // required
+    LastName: 'Doe', // required
+    Email: 'johndoe@example.com', // required
+    Phone: '111-222-3333' // nullable, as defined in our Customer interface. Since this is optional, this property could be removed and this would still be type-valid. 
+});
+console.log(customer.Id); // this will display the Id that was assigned from MySQL to the console
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+INSERT INTO Customer 
+    (CustomerId, FirstName, LastName, Email, Phone) 
+    VALUES 
+    ({nextId}, 'John', 'Doe', 'johndoe@example.com', '111-222-3333');
+```
+
+Here is an example of inserting multiple records.
+
+```ts
+// ... initialization
+
+const nextId = customerCtx.count();
+const customer = customerCtx.insertMany([{
+    CustomerId: ++nextId, // required, as defined in our Customer interface. If this property were removed, then this would NOT be type-valid
+    FirstName: 'John', // required
+    LastName: 'Doe', // required
+    Email: 'johndoe@example.com', // required
+    Phone: '111-222-3333' // nullable, as defined in our Customer interface. Since this is optional, this property could be removed and this would still be type-valid. 
+}, {
+    CustomerId: ++nextId, // required, as defined in our Customer interface. If this property were removed, then this would NOT be type-valid
+    FirstName: 'Jane', // required
+    LastName: 'Doe', // required
+    Email: 'janedoe@example.com', // required
+}]);
+```
+
+The above example builds the following command (not formatted to actual command that is sent):
+
+```sql
+INSERT INTO Customer 
+    (CustomerId, FirstName, LastName, Email, Phone) 
+    VALUES 
+    ({nextId}, 'John', 'Doe', 'johndoe@example.com', '111-222-3333'),
+    ({nextId}, 'John', 'Doe', 'janedoe@example.com', NULL);
+```
 
 # Updating
 
@@ -515,7 +574,7 @@ The update commands have access to the WHERE clause builder function. You can re
 
 Joining tables is a little bit more intuitive, but is still just as simple as any of the simple interaction commands.
 
-__NOTE: As of version 1.0.3, you can only join on a singular key. There are plans to make it so you can add AND and OR conditionals.__
+__NOTE: As of v1.0, you can only join on a singular key. There are plans to make it so you can add AND and OR conditionals.__
 
 ## (INNER) JOIN
 
