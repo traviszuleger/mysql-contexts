@@ -1,9 +1,8 @@
 node_modules
-/lib/src/out
-/lib/src/out/**/*
-/lib/src/jsdoc-conf.json
 /lib/tests
 /lib/tests/**/*
-/lib/esm
-/lib/esm/**/*
+/dist
+/dist/**/*
+/out
+/out/**/*
 package-lock.json

@@ -7,9 +7,13 @@
         "allowJs": true,
         "declaration": true,
         "declarationMap": true,
-        "allowSyntheticDefaultImports": true
+        "allowSyntheticDefaultImports": true,
+        "types": ["node"]
     },
     "files": [
-        "../lib/src/contexts.js"
+        "../lib/src/index.js",
+        "../lib/src/contexts.js",
+        "../lib/src/builders.js",
+        "../lib/src/toolbelt.js",
     ]
 }

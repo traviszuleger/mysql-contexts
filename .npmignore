@@ -3,9 +3,9 @@ node_modules
 /lib/examples/*
 /lib/src/out
 /lib/src/out/*
-/lib/src/jsdoc-conf.json
 /lib/src/types.js
 /lib/tests
 /lib/tests/*
 package-lock.json
+jsdoc-conf.json
 README.md

@@ -10,8 +10,9 @@
     "main": "./lib/cjs/index.js",
     "types": "./lib/cjs/types/index.d.ts",
     "scripts": {
+        "document": "jsdoc ./lib/src/ -t ./node_modules/docdash -c ./jsdoc-conf.json",
         "build": "npm run build:esm && npm run build:cjs",
-        "build:esm": "tsc -p ./configs/tsconfig.esm.json && mv lib/esm/index.js lib/esm/index.mjs",
+        "build:esm": "tsc -p ./configs/tsconfig.esm.json",
         "build:cjs": "tsc -p ./configs/tsconfig.cjs.json",
         "prepack": "npm run build"
     },
@@ -47,20 +48,22 @@
         "mysql2": "^3.0.1"
     },
     "devDependencies": {
+        "@types/node": "^18.11.18",
+        "docdash": "^2.0.1",
         "typescript": "^4.9.4"
     },
     "files": [
-        "src/**/*"
+        "dist/**/*"
     ],
     "exports": {
         ".": {
             "import": {
-                "types": "./lib/esm/types/index.d.ts",
-                "default": "./lib/esm/index.mjs"
+                "types": "./dist/esm/types/index.d.ts",
+                "default": "./dist/esm/index.js"
             },
             "require": {
-                "types": "./lib/cjs/types/index.d.ts",
-                "default": "./lib/esm/index.mjs"
+                "types": "./dist/cjs/types/index.d.ts",
+                "default": "./dist/esm/index.js"
             }
         }
     }
