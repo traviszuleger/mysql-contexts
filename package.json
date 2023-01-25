@@ -1,14 +1,19 @@
 {
     "name": "@tzuleger/mysql-contexts",
-    "version": "1.0.9",
+    "version": "1.0.12",
     "homepage": "http://pkgs.traviszuleger.com/mysql-contexts",
     "repository": {
         "type": "git",
         "url": "https://github.com/traviszuleger/mysql-contexts"
     },
     "description": "Provides an easy way to interact with the mysql2 connector by creating Contexts connected to a table in your MySQL database. This also supports joining tables on each other to create read-only joined contexts.",
-    "main": "index.js",
+    "main": "./lib/cjs/index.js",
+    "types": "./lib/cjs/types/index.d.ts",
     "scripts": {
+        "build": "npm run build:esm && npm run build:cjs",
+        "build:esm": "tsc -p ./configs/tsconfig.esm.json && mv lib/esm/index.js lib/esm/index.mjs",
+        "build:cjs": "tsc -p ./configs/tsconfig.cjs.json",
+        "prepack": "npm run build"
     },
     "keywords": [
         "mysql",
@@ -40,5 +45,23 @@
     "type": "module",
     "dependencies": {
         "mysql2": "^3.0.1"
+    },
+    "devDependencies": {
+        "typescript": "^4.9.4"
+    },
+    "files": [
+        "src/**/*"
+    ],
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./lib/esm/types/index.d.ts",
+                "default": "./lib/esm/index.mjs"
+            },
+            "require": {
+                "types": "./lib/cjs/types/index.d.ts",
+                "default": "./lib/esm/index.mjs"
+            }
+        }
     }
 }

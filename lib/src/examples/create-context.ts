@@ -1,5 +1,4 @@
-import MySqlTableContext from '..';
-import { MySqlJoinContext } from '../src/contexts';
+import { MySqlTableContext } from "../contexts";
 import type { Customer, Artist, Employee } from "./chinook-types";
 
 const pool = MySqlTableContext.createPool({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" });
