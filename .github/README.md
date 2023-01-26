@@ -50,7 +50,7 @@ ENV MYSQL_ROOT_PASSWORD=root
 
 ADD initdb.sql /docker-entrypoint-initdb.d
 ```
-2.) In the same directory as the Dockerfile, create a new file called "initdb.sql" with the contents from [here](https://raw.githubusercontent.com/traviszuleger/mysql-contexts/main/example/initdb.sql)  
+2.) In the same directory as the Dockerfile, create a new file called "initdb.sql" with the contents from [here](https://raw.githubusercontent.com/traviszuleger/mysql-contexts/main/lib/src/examples/initdb.sql)  
 3.) From the command line, in the same directory as your Dockerfile and "initdb.sql", run the following instructions  
 ```
 sudo docker build --tag chinook_example_image .
