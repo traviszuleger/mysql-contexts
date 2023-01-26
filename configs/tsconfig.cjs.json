@@ -2,10 +2,10 @@
     "extends": "./tsconfig.base.json",
     "compilerOptions": {
         "lib": [
-            "ES2022",
+            "ES6",
             "DOM"
         ],
-        "target": "ES2022",
+        "target": "ES6",
         "module": "CommonJS",
         "moduleResolution": "Node",
         "outDir": "../dist/cjs",

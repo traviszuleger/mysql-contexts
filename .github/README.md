@@ -997,10 +997,10 @@ Events are fired when the table does the following:
  - Querying record(s)
  - Deleting record(s)
 
-You can easily tag on any of these event listeners by calling the `.onQuery()`, `.onInsert()`, `.onUpdate()`, or `.onDelete()` functions on the Table you want to attach the listener to. Each of these functions take two callback function arguments, `success` and `fail`.
+You can easily tag on any of these event listeners by calling the `.onQuerySuccess()`, `onQueryFail()`, `.onInsertSuccess()`, `.onInsertFail()`, `.onUpdateSuccess()`, `.onUpdateFail()`, `.onDeleteSuccess()`, or `.onDeleteSuccess()` functions on the Table you want to attach the listener to. Each of these functions take two callback function arguments, `success` and `fail`. Alternatively, you can use the `.onSuccess()` and `.onFail()` functions to apply your listener to ALL events.
 
-  - `success: (OnSuccessData) => void`: Callback function that is emitted when the command is successful.
-  - `fail: (OnFailData) => void`: Callback function that is emitted when the command failed.
+  - For "Success" functions - `success: (OnSuccessData) => void`: Callback function that is emitted when the command is successful.
+  - For "Fail" functions - `fail: (OnFailData) => void`: Callback function that is emitted when the command failed.
 
 Here is an example of adding event for both successful and unsuccessful Querying events:
 
@@ -1015,10 +1015,12 @@ const loggingCtx = new MySqlTableContext<{ Id?: number, ErrorDetails: string, Sc
 // Port is defaulted to 3306.
 const pool = MySqlTableContext.createPool({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" });
 const customerCtx = new MySqlTableContext<CustomerWithAutoIncrementId>(pool, "Customer", "Id");
-customerCtx.onQuery(
+customerCtx.onQuerySuccess(
     ({ affectedRows, dateIso, host, schema, cmdRaw, cmd, args }) => {
         console.log(`${dateIso}: ${host} - Query command executed on ${schema}.`);
-    }, 
+    }
+);
+customerCtx.onQueryFail(
     async ({ error, dateIso, host, schema, cmdRaw, cmd, args }) => {
         await loggingCtx.insertOne({
             ErrorDetails: error,
@@ -1032,9 +1034,9 @@ customerCtx.onQuery(
 );
 ```
 
-The above code shows how powerful these events can get-- You can log specific data about the failed statement, print it to the command line, or even re-attempt it with a different database.
+The above code shows how powerful these events can get-- You can log specific data about the failed statement, print it to the command line, or even re-attempt it with a different database. You can also attach multiple events to an event. Each event will be emitted in the order that it was attached.
 
-__NOTE: Attaching a FailHandler onto any command fail event in that `MySqlTableContext` will still throw the original Error at time of execution. These event handlers are primarily for logging purposes.__  
+__NOTE: Attaching a FailHandler onto any command fail event in that `MySqlTableContext` will *still* throw the original Error at time of execution. These event handlers are primarily for logging purposes.__  
 
 # Future plans
 
