@@ -27,6 +27,7 @@ export interface Customer {
     Fax?: string;
     Email: string;
     SupportRepId?: number;
+    Employee?: Employee;
 };
 
 export interface Employee {
