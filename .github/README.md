@@ -20,7 +20,8 @@ mysql-contexts provides a strongly-typed, easy way to interact with your MySQL d
   - [Inserting](#inserting)
   - [Updating](#updating)
   - [Deleting](#deleting)
-  - [Joining Tables](#joining-tables)
+  - [Relationships and Foreign Records](#relationships-and-foreign-records)
+  - [Joining Tables (deprecated)](#joining-tables)
     - [(INNER) JOIN](#inner-join)
     - [LEFT (OUTER) JOIN](#left-OUTER-join)
     - [RIGHT (OUTER) JOIN](#right-OUTER-join)
@@ -832,7 +833,147 @@ TRUNCATE Customer;
 
 __Please do not complain to me that you got fired because you chose to use this function. You have been warned.__
 
-# Joining tables
+# Relationships and Foreign Records
+
+In libraries like .NET's Entity Framework Core, you'll see that you can configure Foreign records to your record types.  
+
+This behavior is helpful for being able to reference a relating object to something you may have already queried.
+
+This feature needs more work, and may not be efficient nor fast right now, but it is available as of 1.1.
+
+## Configuring a Relationship
+
+This section will go into how to configure a type of relationship on a Table Context.
+
+When configuring your relationship, you have one of two functions you can call on your context after construction.
+  - `.hasOne(relationshipCallback)`: Configures a One to One relationship on that Table given the Relationship callback.
+    - The relationship callback uses a `Proxy` to detect what field you are attempting to create a relationship on. The properties available through TypeScript will be the keys you have configured in your interface filtered by which keys that map to some `AbstractModel` object (`{[key: string]: any}`). Then you will have access to a chaining of a few functions: `.from(realTableName).with(thisColumn).to(thatColumn)`.
+  - `.hasMany(relationshipCallback)`: Configures a One to Many relationship on that Table given the Relationship callback.
+    - The relationship callback uses a `Proxy` to detect what field you are attempting to create a relationship on. The properties available through TypeScript will be the keys you have configured in your interface filtered by which keys that map to some array of `AbstractModel`s (`{[key: string]: any}`). Then you will have access to a chaining of a few functions: `.from(realTableName).with(thisColumn).to(thatColumn)`.
+
+### One-to-One Relationship
+
+One to One Relationships is the relationship of one Record having one Record. The behavior for a One-to-One record in mysql-contexts is a little different right now. If you specify a "one to one relationship", it can either be a "many to one" or a "one to one" relationship. It is quite broad but gets the behavior you are looking for in all situations.
+
+Here is an example of how to configure a one-to-one relationship.
+
+```ts
+import { MySqlTableContext } from "@tzuleger/mysql-contexts";
+
+interface Track {
+    TrackId: number;
+    Name: string;
+    AlbumId: number;
+    MediaTypeId: number;
+    GenreId: number;
+    Composer: number;
+    Milliseconds: number;
+    Bytes: number;
+    UnitPrice: number;
+    Artist?: Artist;
+}
+
+interface Artist {
+    ArtistId: number;
+    Name?: string;
+    Tracks?: Track[];
+};
+
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
+
+tracks.hasOne(m => m.Artist.from("Artist").with("Name").to("Composer"));
+```
+
+### One-to-Many Relationship
+
+One to Many Relationships is the relationship of one Record having many Records.
+
+Here is an example of how to configure a one-to-many relationship.
+
+```ts
+import { MySqlTableContext } from "@tzuleger/mysql-contexts";
+
+interface Track {
+    TrackId: number;
+    Name: string;
+    AlbumId: number;
+    MediaTypeId: number;
+    GenreId: number;
+    Composer: number;
+    Milliseconds: number;
+    Bytes: number;
+    UnitPrice: number;
+    Artists?: Artist[];
+}
+
+interface Artist {
+    ArtistId: number;
+    Name?: string;
+    Tracks?: Track[];
+};
+
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
+
+tracks.hasMany(m => m.Artists.from("Artist").with("Name").to("Composer"));
+```
+
+## Including your foreign record
+
+The relationship configuration isn't enough to get what you want accomplished, as when this feature was developed, the idea in mind was that sometimes the user may want to query a record with their relationship at one point, but at another just want the bare fields for the original record.
+
+The syntax for including is simple: `.include(includeCallback)` where your includeCallback is just a Proxy that detects the property you reference.
+
+Here is an example of including a record in a query:
+
+```ts
+import { MySqlTableContext } from "@tzuleger/mysql-contexts";
+
+interface Track {
+    TrackId: number;
+    Name: string;
+    AlbumId: number;
+    MediaTypeId: number;
+    GenreId: number;
+    Composer: number;
+    Milliseconds: number;
+    Bytes: number;
+    UnitPrice: number;
+    Artist?: Artist;
+}
+
+interface Artist {
+    ArtistId: number;
+    Name?: string;
+    Tracks?: Track[];
+};
+
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
+
+tracks.hasOne(m => m.Artist.from("Artist").with("Name").to("Composer"));
+
+const apocalypticaTracks = await tracks.include(m => m.Artist).getAll(where => where.equals("Composer", "Apocalyptica"));
+
+console.log(`${apocalypticaTracks[0].Name} by ${apocalypticaTracks[0].Artist.Name}`);
+// prints out: "Enter Sandman by Apocalyptica"
+```
+
+The above example builds the following MySQL statement (not formatted to actual command that is sent):
+
+```sql
+SELECT * 
+    FROM `Track`
+    WHERE `Composer` = Apocalyptica 
+    LIMIT 1;
+-- and
+SELECT * 
+    FROM `Artist` 
+    WHERE `Artist`.`Name` = Apocalyptica;
+```
+
+# Joining tables (deprecated)
 
 Joining tables is a little bit more intuitive, as it requires you to explicitly define your keys that you are joining on. This may become easier, syntactically, in the future.
 

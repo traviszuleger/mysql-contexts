@@ -1,5 +1,5 @@
 import { MySqlTableContext } from "../contexts";
-import type { Customer, Artist, Employee } from "./chinook-types";
+import type { Customer, Artist, Employee, Playlist } from "./chinook-types";
 
 const pool = MySqlTableContext.createPool({ host: "127.0.0.1", port: 10500, database: "chinook", user: "root", password: "root" });
 const customerCtx = new MySqlTableContext<Customer>(pool, "Customer");
@@ -83,8 +83,6 @@ function exampleUpdateOne() {
 function exampleUpdateMany() {
 
 }
-
-
 
 
 // Used simply for cleaning up the examples.

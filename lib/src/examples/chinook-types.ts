@@ -1,12 +1,16 @@
+import { MySqlTableContext } from "../contexts";
+
 export interface Album {
     AlbumId: number;
     Title: string;
     ArtistId: number;
 };
 
+/** @implements {AbstractModel} */
 export interface Artist {
     ArtistId: number;
     Name?: string;
+    Tracks?: Track[];
 };
 
 export interface Customer {
@@ -87,8 +91,9 @@ export interface Track {
     AlbumId: number;
     MediaTypeId: number;
     GenreId: number;
-    Composer: number;
+    Composer: string;
     Milliseconds: number;
     Bytes: number;
     UnitPrice: number;
+    Artist?: Artist;
 }
