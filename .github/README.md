@@ -883,10 +883,10 @@ interface Artist {
     Tracks?: Track[];
 };
 
-const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinook", user: "root", password: "mySuperSecretPassword" });
 const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
 
-tracks.hasOne(m => m.Artist.from("Artist").with("Name").to("Composer"));
+tracks.hasOne(m => m.Artist.from("Artist").with("Composer").to("Name"));
 ```
 
 ### One-to-Many Relationship
@@ -917,10 +917,10 @@ interface Artist {
     Tracks?: Track[];
 };
 
-const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinook", user: "root", password: "mySuperSecretPassword" });
 const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
 
-tracks.hasMany(m => m.Artists.from("Artist").with("Name").to("Composer"));
+tracks.hasMany(m => m.Artists.from("Artist").with("Composer").to("Name"));
 ```
 
 ## Including your foreign record
@@ -953,10 +953,10 @@ interface Artist {
     Tracks?: Track[];
 };
 
-const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinnok", user: "root", password: "mySuperSecretPassword" });
+const pool = MySqlTableContext.createPool({ host: "localhost", port: 3306, database: "chinook", user: "root", password: "mySuperSecretPassword" });
 const tracks: MySqlTableContext<Track> = new MySqlTableContext<Track>(pool, "Track");
 
-tracks.hasOne(m => m.Artist.from("Artist").with("Name").to("Composer"));
+tracks.hasOne(m => m.Artist.from("Artist").with("Composer").to("Name"));
 
 const apocalypticaTracks = await tracks.include(m => m.Artist).getAll(where => where.equals("Composer", "Apocalyptica"));
 
